@@ -137,6 +137,8 @@
     students: [], visitors: [], users: [], query: '',
     guardName: ls.get('guardName'),
     user: null, myRole: null,
+    recStudents: { query: '', sort: 'date-desc' },
+    recVisitors: { query: '', sort: 'date-desc' },
   };
   // אדמין = ברשימת adminEmails הקבועה (bootstrap), או שהמנהל הנוכחי הגדיר לו role: 'admin' במסך ניהול
   const isAdmin = () => !!state.user && (
@@ -217,63 +219,83 @@
       <p class="mt-2 text-lg font-bold">הרשימה זמינה למנהל בלבד</p>
       <button class="btn btn-primary mt-4" data-action="open-login">🔑 כניסת מנהל</button></div>`;
 
-  // רשימה מקיפה (כל הרשומות, לא רק היום), מקובצת לפי חודש – החודש האחרון קודם.
+  // רשימה מקיפה (כל הרשומות, לא רק היום) עם חיפוש ומיון: לפי חודש (ברירת מחדל), לפי שם, או לפי סטטוס.
+  const norm = s => String(s ?? '').toLowerCase();
+  const matchesQuery = (fields, q) => !q || fields.some(f => norm(f).includes(q));
   const monthLabel = ym => {
     const [y, m] = ym.split('-').map(Number);
     return new Date(y, m - 1, 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
   };
-  function groupByMonth(list, dateKey) {
+  function groupByMonth(list, dateKey, dir) {
     const groups = {};
     list.forEach(item => (groups[item[dateKey].slice(0, 7)] ||= []).push(item));
-    return Object.keys(groups).sort().reverse().map(ym => ({ label: monthLabel(ym), items: groups[ym] }));
+    const keys = Object.keys(groups).sort();
+    if (dir === -1) keys.reverse();
+    return keys.map(ym => ({ label: monthLabel(ym), items: groups[ym] }));
   }
   const monthSection = (label, count, body) => `<section class="mb-6 last:mb-0">
       <h3 class="mb-2 text-base font-extrabold text-brand-700">${label} <span class="text-sm font-semibold text-slate-500">(${count})</span></h3>
       ${body}</section>`;
+  // מרנדר לפי מצב המיון: תאריך → מקובץ לפי חודש; שם/סטטוס → רשימה שטוחה ממוינת.
+  function renderRecList(box, list, cfg, headers, rowHtml, cardHtml, dateKey, dateSortKey, emptyMsg) {
+    if (!list.length) { box.innerHTML = empty(emptyMsg); return; }
+    if (cfg.sort === 'name' || cfg.sort === 'status') {
+      const sorted = cfg.sort === 'status' ? sortBy(list, x => x.status) : sortBy(list, dateSortKey.name);
+      box.innerHTML = listView(headers, sorted.map(rowHtml), sorted.map(cardHtml), '');
+      return;
+    }
+    const dir = cfg.sort === 'date-asc' ? 1 : -1;
+    const sorted = sortBy(list, dateSortKey.date, dir);
+    const groups = groupByMonth(sorted, dateKey, dir);
+    box.innerHTML = groups.map(g => monthSection(g.label, g.items.length,
+      listView(headers, g.items.map(rowHtml), g.items.map(cardHtml), ''))).join('');
+  }
 
   function renderStaffStudents() {
     const box = $('#rec-students-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
-    if (!state.students.length) { box.innerHTML = empty('אין אישורי יציאה'); return; }
+    const cfg = state.recStudents;
+    const q = norm(cfg.query.trim());
+    const filtered = state.students.filter(s => matchesQuery([s.studentName, s.grade, s.approvedBy], q));
     const tone = { [S.PENDING]: 'bg-amber-100 text-amber-800', [S.EXITED]: 'bg-emerald-100 text-emerald-800', [S.CANCELLED]: 'bg-slate-200 text-slate-600' };
     const detail = s => s.status === S.EXITED
       ? `<div class="mt-1 text-sm text-slate-500">ב-${fmtTs(s.actualExitAt)} · שומר: ${esc(s.guardName)}</div>` : '';
     const cancelBtn = (s, cls = '') => s.status === S.PENDING
       ? `<button class="btn btn-danger btn-sm ${cls}" data-action="student-cancel" data-id="${esc(s.id)}">ביטול אישור</button>` : '';
     const editBtn = (s, cls = '') => `<button class="btn btn-ghost btn-sm ${cls}" data-action="student-edit" data-id="${esc(s.id)}">✏️ עריכה</button>`;
-    const groups = groupByMonth(sortBy(state.students, s => s.exitDate + s.exitTime, -1), 'exitDate');
-    box.innerHTML = groups.map(g => monthSection(g.label, g.items.length, listView(
-      ['תלמיד/ה', 'כיתה', 'יציאה מאושרת', 'מאשר/ת', 'סטטוס', ''],
-      g.items.map(s => `<tr>
+    const rowHtml = s => `<tr>
         ${td(esc(s.studentName), 'font-bold')}
         ${td(esc(s.grade))}
         ${td(`${fmtDate(s.exitDate)} · ${esc(s.exitTime)}`)}
         ${td(esc(s.approvedBy))}
         ${td(pill(s.status, tone[s.status] || '') + detail(s))}
-        ${td(`<div class="flex flex-wrap gap-2">${editBtn(s)}${cancelBtn(s)}</div>`)}</tr>`),
-      g.items.map(s => miniCard(
-        `<div class="text-base font-bold">${esc(s.studentName)}</div>${pill(s.status, tone[s.status] || '')}`,
-        `כיתה ${esc(s.grade)} · ${fmtDate(s.exitDate)} ${esc(s.exitTime)} · אישר/ה: ${esc(s.approvedBy)}`,
-        detail(s), `<div class="flex gap-2">${editBtn(s, 'flex-1 py-3')}${cancelBtn(s, 'flex-1 py-3')}</div>`)),
-      ''))).join('');
+        ${td(`<div class="flex flex-wrap gap-2">${editBtn(s)}${cancelBtn(s)}</div>`)}</tr>`;
+    const cardHtml = s => miniCard(
+      `<div class="text-base font-bold">${esc(s.studentName)}</div>${pill(s.status, tone[s.status] || '')}`,
+      `כיתה ${esc(s.grade)} · ${fmtDate(s.exitDate)} ${esc(s.exitTime)} · אישר/ה: ${esc(s.approvedBy)}`,
+      detail(s), `<div class="flex gap-2">${editBtn(s, 'flex-1 py-3')}${cancelBtn(s, 'flex-1 py-3')}</div>`);
+    renderRecList(box, filtered, cfg, ['תלמיד/ה', 'כיתה', 'יציאה מאושרת', 'מאשר/ת', 'סטטוס', ''], rowHtml, cardHtml,
+      'exitDate', { name: s => s.studentName, date: s => s.exitDate + s.exitTime },
+      q ? 'לא נמצאו תוצאות' : 'אין אישורי יציאה');
   }
 
   function renderStaffVisitors() {
     const box = $('#rec-visitors-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
-    if (!state.visitors.length) { box.innerHTML = empty('אין אישורי כניסה'); return; }
+    const cfg = state.recVisitors;
+    const q = norm(cfg.query.trim());
+    const filtered = state.visitors.filter(v =>
+      matchesQuery([v.firstName, v.lastName, v.idNumber, v.purpose, v.approvedBy, v.notes], q));
     const tone = { [V.PENDING]: 'bg-amber-100 text-amber-800', [V.INSIDE]: 'bg-emerald-100 text-emerald-800', [V.LEFT]: 'bg-slate-200 text-slate-600' };
     const detail = v => v.entryAt
       ? `<div class="mt-1 text-sm text-slate-500">נכנס ${fmtTs(v.entryAt)}${v.exitAt ? ` · יצא ${fmtTs(v.exitAt)}` : ''} · שומר: ${esc(v.guardName)}</div>` : '';
     const escort = v => v.escortRequired ? pill('נדרש ליווי', 'bg-red-100 text-red-700') : pill('ללא ליווי', 'bg-emerald-100 text-emerald-800');
     const armed = v => v.armedAllowed ? pill('רשאי נשק', 'bg-emerald-100 text-emerald-800') : pill('אסור נשק', 'bg-red-100 text-red-700');
+    const notes = v => v.notes ? esc(v.notes) : '—';
     const deleteBtn = (v, cls = '') => v.status === V.PENDING
       ? `<button class="btn btn-danger btn-sm ${cls}" data-action="visitor-delete" data-id="${esc(v.id)}">מחיקה</button>` : '';
     const editBtn = (v, cls = '') => `<button class="btn btn-ghost btn-sm ${cls}" data-action="visitor-edit" data-id="${esc(v.id)}">✏️ עריכה</button>`;
-    const groups = groupByMonth(sortBy(state.visitors, v => v.visitDate + String(v.createdAt).padStart(15, '0'), -1), 'visitDate');
-    box.innerHTML = groups.map(g => monthSection(g.label, g.items.length, listView(
-      ['מבקר/ת', 'ת"ז', 'מטרה', 'ליווי', 'נשק', 'מאשר/ת', 'תאריך', 'סטטוס', ''],
-      g.items.map(v => `<tr>
+    const rowHtml = v => `<tr>
         ${td(`${esc(v.firstName)} ${esc(v.lastName)}`, 'font-bold')}
         ${td(esc(v.idNumber))}
         ${td(esc(v.purpose))}
@@ -281,14 +303,18 @@
         ${td(armed(v))}
         ${td(esc(v.approvedBy))}
         ${td(fmtDate(v.visitDate))}
+        ${td(notes(v), 'max-w-[14rem] whitespace-pre-wrap text-slate-600')}
         ${td(pill(v.status, tone[v.status] || '') + detail(v))}
-        ${td(`<div class="flex flex-wrap gap-2">${editBtn(v)}${deleteBtn(v)}</div>`)}</tr>`),
-      g.items.map(v => miniCard(
-        `<div class="text-base font-bold">${esc(v.firstName)} ${esc(v.lastName)}</div>${pill(v.status, tone[v.status] || '')}`,
-        `ת"ז ${esc(v.idNumber)} · ${esc(v.purpose)}<br>${fmtDate(v.visitDate)} · אישר/ה: ${esc(v.approvedBy)}`,
-        `<div class="mt-2 flex flex-wrap gap-2">${escort(v)}${armed(v)}</div>${detail(v)}`,
-        `<div class="flex gap-2">${editBtn(v, 'flex-1 py-3')}${deleteBtn(v, 'flex-1 py-3')}</div>`)),
-      ''))).join('');
+        ${td(`<div class="flex flex-wrap gap-2">${editBtn(v)}${deleteBtn(v)}</div>`)}</tr>`;
+    const cardHtml = v => miniCard(
+      `<div class="text-base font-bold">${esc(v.firstName)} ${esc(v.lastName)}</div>${pill(v.status, tone[v.status] || '')}`,
+      `ת"ז ${esc(v.idNumber)} · ${esc(v.purpose)}<br>${fmtDate(v.visitDate)} · אישר/ה: ${esc(v.approvedBy)}`,
+      `<div class="mt-2 flex flex-wrap gap-2">${escort(v)}${armed(v)}</div>${detail(v)}`
+      + (v.notes ? `<div class="mt-2 whitespace-pre-wrap rounded-lg bg-amber-50 p-2 text-sm text-amber-900">📝 ${esc(v.notes)}</div>` : ''),
+      `<div class="flex gap-2">${editBtn(v, 'flex-1 py-3')}${deleteBtn(v, 'flex-1 py-3')}</div>`);
+    renderRecList(box, filtered, cfg, ['מבקר/ת', 'ת"ז', 'מטרה', 'ליווי', 'נשק', 'מאשר/ת', 'תאריך', 'הערות', 'סטטוס', ''], rowHtml, cardHtml,
+      'visitDate', { name: v => `${v.firstName} ${v.lastName}`, date: v => v.visitDate + String(v.createdAt).padStart(15, '0') },
+      q ? 'לא נמצאו תוצאות' : 'אין אישורי כניסה');
   }
 
   // ───────── עריכת רשומה (מנהל בלבד) ─────────
@@ -309,18 +335,21 @@
       ['approvedBy', 'שם המאשר/ת', 'text'],
       ['escortRequired', 'נדרש ליווי?', 'bool'],
       ['armedAllowed', 'רשאי להיכנס עם נשק?', 'bool'],
+      ['notes', 'הערות לשומר', 'textarea', true],
     ],
   };
   let editCtx = null;   // { kind: 'student'|'visitor', id }
 
-  function editFieldHtml([name, label, type], value) {
+  function editFieldHtml([name, label, type, optional], value) {
     if (type === 'bool') return `<div><label class="label">${label}</label>
       <select class="field" name="${name}">
         <option value="yes" ${value ? 'selected' : ''}>כן</option>
         <option value="no" ${!value ? 'selected' : ''}>לא</option>
       </select></div>`;
+    if (type === 'textarea') return `<div><label class="label">${label}</label>
+      <textarea class="field" name="${name}" rows="2">${esc(value ?? '')}</textarea></div>`;
     return `<div><label class="label">${label}</label>
-      <input class="field" name="${name}" type="${type}" ${type !== 'text' ? 'dir="ltr"' : ''} value="${esc(value ?? '')}" required></div>`;
+      <input class="field" name="${name}" type="${type}" ${type !== 'text' ? 'dir="ltr"' : ''} value="${esc(value ?? '')}" ${optional ? '' : 'required'}></div>`;
   }
 
   function openEdit(kind, record) {
@@ -343,10 +372,13 @@
     const { kind, id } = editCtx;
     const form = e.target;
     const patch = {};
-    for (const [name, , type] of EDIT_FIELDS[kind]) {
-      patch[name] = type === 'bool' ? form.elements[name].value === 'yes' : form.elements[name].value.trim();
+    let missing = false;
+    for (const [name, , type, optional] of EDIT_FIELDS[kind]) {
+      const raw = type === 'bool' ? form.elements[name].value === 'yes' : form.elements[name].value.trim();
+      if (!optional && raw === '') missing = true;
+      patch[name] = raw;
     }
-    if (Object.values(patch).some(v => v === '')) return toast('יש למלא את כל השדות', 'err');
+    if (missing) return toast('יש למלא את כל השדות', 'err');
     const col = kind === 'student' ? COL.students : COL.visitors;
     once('edit:' + id, async () => {
       if (await run(() => store.patch(col, id, patch).then(() => true))) {
@@ -446,6 +478,7 @@
         <div class="text-slate-600">מטרה: ${esc(v.purpose)} · אישר/ה: ${esc(v.approvedBy)}</div>
       </div>
       <div class="flex flex-wrap gap-2">${armed}${escort}</div>
+      ${v.notes ? `<div class="whitespace-pre-wrap rounded-lg bg-amber-50 p-3 text-base font-semibold text-amber-900">📝 ${esc(v.notes)}</div>` : ''}
       ${info ? `<div class="text-slate-600">${info}</div>` : ''}
       ${action}
     </article>`;
@@ -713,6 +746,11 @@
   });
   $('#visitor-search').addEventListener('input', e => { state.query = e.target.value; renderGuardVisitors(); });
 
+  $('#rec-students-search').addEventListener('input', e => { state.recStudents.query = e.target.value; renderStaffStudents(); });
+  $('#rec-students-sort').addEventListener('change', e => { state.recStudents.sort = e.target.value; renderStaffStudents(); });
+  $('#rec-visitors-search').addEventListener('input', e => { state.recVisitors.query = e.target.value; renderStaffVisitors(); });
+  $('#rec-visitors-sort').addEventListener('change', e => { state.recVisitors.sort = e.target.value; renderStaffVisitors(); });
+
   // ───────── טפסי צוות ─────────
   const formStudent = $('#form-student');
   const formVisitor = $('#form-visitor');
@@ -748,6 +786,7 @@
     ls.set('staffName', d.approvedBy);
     const doc = {
       ...d,
+      notes: formVisitor.elements.notes.value.trim(),
       escortRequired: radio('escortRequired') === 'yes',
       armedAllowed: radio('armedAllowed') === 'yes',
       status: V.PENDING, entryAt: null, exitAt: null, guardName: '', exitGuardName: '',

@@ -24,6 +24,8 @@
   <style type="text/tailwindcss">
     html { -webkit-tap-highlight-color: transparent; }
     button, summary, .seg { touch-action: manipulation; }
+    /* חלק מהדפדפנים (בעיקר iOS Safari) מרנדרים type=date/time עם רוחב מינימלי שגולש מהקונטיינר */
+    input[type="date"], input[type="time"] { min-width: 0; max-width: 100%; }
 
     @layer components {
       /* ניווט ראשי: תפריט תחתון במובייל, לשוניות בדסקטופ */
@@ -43,7 +45,8 @@
 
       .card       { @apply rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6; }
       .label      { @apply mb-1 block text-sm font-semibold text-slate-700; }
-      .field      { @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200; }
+      .field      { @apply w-full min-w-0 rounded-xl border border-slate-300 bg-white px-3 py-3 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200; }
+      .field[type="date"], .field[type="time"] { @apply px-2; }
 
       .seg        { @apply block cursor-pointer rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-center font-bold text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-800 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300; }
 
@@ -168,6 +171,8 @@
                   <label><input type="radio" name="armedAllowed" value="no" class="peer sr-only" required><span class="seg">לא</span></label>
                 </div>
               </fieldset>
+              <div class="sm:col-span-2 lg:col-span-3"><label class="label" for="v-notes">הערות לשומר (לא חובה)</label>
+                <textarea id="v-notes" name="notes" class="field" rows="2" placeholder="למשל: להודיע לרונית בהגעה, או לשלוח לחדר המורים"></textarea></div>
             </div>
             <p class="mt-3 text-sm text-slate-500">שדות הליווי והנשק אינם מסומנים מראש בכוונה – יש לבחור אותם במפורש.</p>
             <button class="btn btn-primary mt-4 w-full py-4 text-lg sm:w-auto" type="submit">➕ הוסף אישור כניסה</button>
@@ -175,15 +180,37 @@
         </div>
       </section>
 
-      <!-- ═════════════ רשימה מקיפה, ממוינת לפי חודש (מנהל בלבד) ═════════════ -->
+      <!-- ═════════════ רשימה מקיפה, עם חיפוש ומיון (מנהל בלבד) ═════════════ -->
       <section id="view-records" class="hidden space-y-6">
         <div class="card">
-          <h2 class="mb-3 text-lg font-extrabold">🎒 אישורי יציאה</h2>
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-lg font-extrabold">🎒 אישורי יציאה</h2>
+            <div class="flex flex-wrap gap-2">
+              <input id="rec-students-search" type="search" class="field !w-44 !py-1.5 !text-sm" placeholder="🔎 חיפוש">
+              <select id="rec-students-sort" class="field !w-auto !py-1.5 !text-sm" aria-label="מיון">
+                <option value="date-desc">תאריך: חדש ← ישן</option>
+                <option value="date-asc">תאריך: ישן ← חדש</option>
+                <option value="name">לפי שם</option>
+                <option value="status">לפי סטטוס</option>
+              </select>
+            </div>
+          </div>
           <div id="rec-students-table"></div>
         </div>
 
         <div class="card">
-          <h2 class="mb-3 text-lg font-extrabold">🪪 אישורי כניסה למבקרים</h2>
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-lg font-extrabold">🪪 אישורי כניסה למבקרים</h2>
+            <div class="flex flex-wrap gap-2">
+              <input id="rec-visitors-search" type="search" class="field !w-44 !py-1.5 !text-sm" placeholder="🔎 חיפוש">
+              <select id="rec-visitors-sort" class="field !w-auto !py-1.5 !text-sm" aria-label="מיון">
+                <option value="date-desc">תאריך: חדש ← ישן</option>
+                <option value="date-asc">תאריך: ישן ← חדש</option>
+                <option value="name">לפי שם</option>
+                <option value="status">לפי סטטוס</option>
+              </select>
+            </div>
+          </div>
           <div id="rec-visitors-table"></div>
         </div>
       </section>
