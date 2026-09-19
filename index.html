@@ -147,7 +147,8 @@
               <div><label class="label" for="s-grade">כיתה</label>
                 <input id="s-grade" name="grade" class="field" placeholder="למשל: ח'2" enterkeyhint="next" required></div>
               <div class="sm:col-span-2 lg:col-span-1"><label class="label" for="s-by">שם הגורם המאשר</label>
-                <input id="s-by" name="approvedBy" class="field" enterkeyhint="next" required></div>
+                <input id="s-by" name="approvedBy" class="field read-only:bg-slate-100 read-only:text-slate-600" enterkeyhint="next" required>
+                <p class="mt-1 text-xs text-slate-500">נקבע לפי השם שהוגדר לך ולא ניתן לשינוי</p></div>
               <div><label class="label" for="s-date">תאריך יציאה</label>
                 <input id="s-date" name="exitDate" type="date" dir="ltr" class="field" required></div>
               <div><label class="label" for="s-time">שעת יציאה</label>
@@ -173,7 +174,8 @@
               <div><label class="label" for="v-date">תאריך הביקור</label>
                 <input id="v-date" name="visitDate" type="date" dir="ltr" class="field" required></div>
               <div class="sm:col-span-2 lg:col-span-1"><label class="label" for="v-by">שם המאשר מבית הספר</label>
-                <input id="v-by" name="approvedBy" class="field" enterkeyhint="done" required></div>
+                <input id="v-by" name="approvedBy" class="field read-only:bg-slate-100 read-only:text-slate-600" enterkeyhint="done" required>
+                <p class="mt-1 text-xs text-slate-500">נקבע לפי השם שהוגדר לך ולא ניתן לשינוי</p></div>
 
               <fieldset>
                 <legend class="label">נדרש ליווי?</legend>

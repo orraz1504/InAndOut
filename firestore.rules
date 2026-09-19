@@ -80,6 +80,16 @@ service cloud.firestore {
       return request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '');
     }
+    // שם המאשר ברשומה חדשה = השם שהוגדר למשתמש ב-users/<email>.name (המנהל קובע אותו, ברירת מחדל: שם חשבון ה-Google).
+    // אם אין שם שמור (או שאין מסמך משתמש, כמו מנהל מה-adminEmails) – שם חשבון ה-Google מהטוקן, ובהעדרו האימייל.
+    // משתמש לא יכול לרשום מאשר אחר: לא ביצירה, ולא בעריכה של רשומה (רק מנהל רשאי לשנות מאשר, למשל לתקן טעות).
+    function approverOk(v) {
+      return (exists(/databases/$(database)/documents/users/$(me()))
+              && get(/databases/$(database)/documents/users/$(me())).data.get('name', '') != '')
+        ? v == get(/databases/$(database)/documents/users/$(me())).data.name
+        : v in [request.auth.token.get('name', ''), request.auth.token.email, me()];
+    }
+    function keepsApprover() { return request.resource.data.approvedBy == resource.data.approvedBy; }
     function changesOnly(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
     function canCreate() { return (isAdmin() || isApproved()) && request.resource.data.createdBy == me(); }
 
@@ -110,9 +120,9 @@ service cloud.firestore {
 
     match /student_exits/{id} {
       allow read: if isAdmin() || isApproved();
-      allow create: if canCreate() && newStudent(request.resource.data);
+      allow create: if canCreate() && newStudent(request.resource.data) && approverOk(request.resource.data.approvedBy);
       allow update: if validStudent(request.resource.data) && keepsOrigin()
-        && (isAdmin() || isCreator() || (isGuard() && guardMayTouchStudent()));
+        && (isAdmin() || (keepsApprover() && (isCreator() || (isGuard() && guardMayTouchStudent()))));
       allow delete: if isAdmin();
     }
 
@@ -144,10 +154,10 @@ service cloud.firestore {
 
     match /visitor_entries/{id} {
       allow read: if isAdmin() || isApproved();
-      allow create: if canCreate() && newVisitor(request.resource.data);
+      allow create: if canCreate() && newVisitor(request.resource.data) && approverOk(request.resource.data.approvedBy);
       allow update: if validVisitor(request.resource.data) && keepsOrigin()
-        && (isAdmin() || isCreator()
-            || (isGuard() && changesOnly(['status', 'entryAt', 'exitAt', 'guardName', 'exitGuardName'])));
+        && (isAdmin() || (keepsApprover()
+            && (isCreator() || (isGuard() && changesOnly(['status', 'entryAt', 'exitAt', 'guardName', 'exitGuardName'])))));
       allow delete: if isAdmin();
     }
   }

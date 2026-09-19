@@ -933,12 +933,15 @@
   const formVisitor = $('#form-visitor');
 
   function initForms() {
-    const by = myDisplayName() || ls.get('staffName');
+    // שם המאשר נקבע לפי השם שהוגדר למשתמש (ע"י המנהל, או שם חשבון ה-Google) ואינו ניתן לעריכה. כללי Firestore אוכפים זאת גם בשרת.
+    const by = myDisplayName();
     formStudent.elements.exitDate.value = todayStr();
     formStudent.elements.exitTime.value = nowClock();
     formStudent.elements.approvedBy.value = by;
+    formStudent.elements.approvedBy.readOnly = !!by;
     formVisitor.elements.visitDate.value = todayStr();
     formVisitor.elements.approvedBy.value = by;
+    formVisitor.elements.approvedBy.readOnly = !!by;
   }
 
   const clean = (form, names) => Object.fromEntries(names.map(n => [n, form.elements[n].value.trim()]));
@@ -946,8 +949,8 @@
   formStudent.addEventListener('submit', e => {
     e.preventDefault();
     const d = clean(formStudent, ['studentName', 'grade', 'exitDate', 'exitTime', 'approvedBy']);
+    d.approvedBy = myDisplayName() || d.approvedBy;                    // גם אם מישהו הסיר את ה-readonly
     if (Object.values(d).some(v => !v)) return toast('יש למלא את כל השדות', 'err');
-    ls.set('staffName', d.approvedBy);
     const doc = { ...d, status: S.PENDING, actualExitAt: null, guardName: '', createdAt: Date.now(), createdBy: myEmail() };
     formStudent.reset();
     initForms();
@@ -957,10 +960,10 @@
   formVisitor.addEventListener('submit', e => {
     e.preventDefault();
     const d = clean(formVisitor, ['firstName', 'lastName', 'idNumber', 'purpose', 'visitDate', 'approvedBy']);
+    d.approvedBy = myDisplayName() || d.approvedBy;
     if (Object.values(d).some(v => !v)) return toast('יש למלא את כל השדות', 'err');
     const radio = name => new FormData(formVisitor).get(name);
     if (!radio('escortRequired') || !radio('armedAllowed')) return toast('יש לבחור ליווי ונשק', 'err');
-    ls.set('staffName', d.approvedBy);
     const doc = {
       ...d,
       notes: formVisitor.elements.notes.value.trim(),
@@ -1038,7 +1041,7 @@
         doc => {
           const prevName = myDisplayName();
           state.myRole = (doc && doc.role) || null;
-          state.myName = ((doc && doc.name) || '').trim();
+          state.myName = (doc && doc.name) || '';
           applyNameChange(prevName, myDisplayName());
           renderChrome();
           setAccess(doc && Object.values(U).includes(doc.status) ? doc.status : U.PENDING);
@@ -1048,6 +1051,17 @@
       console.error(err);
       if (state.user === user) setAccess('error');
     }
+  }
+
+  // מנהל מה-adminEmails לא עובר את watchAccess, אבל אם יש לו מסמך משתמש עם שם שהוגדר – חייבים להשתמש בו כשם המאשר (הכללים דורשים זאת)
+  function watchOwnName(user) {
+    if (!store.subscribeDoc) return;
+    unsubAccess = store.subscribeDoc(COL.users, emailId(user.email), doc => {
+      const prev = myDisplayName();
+      state.myName = (doc && doc.name) || '';
+      applyNameChange(prev, myDisplayName());
+      renderChrome();
+    }, err => console.error(err));
   }
 
   const GOOGLE_ERRORS = {
@@ -1097,11 +1111,11 @@
     renderAll();
   }
 
-  // המנהל שינה את השם שלי בזמן שאני מחובר: מעדכנים את השם בשדות "מאשר" ובשם השומר – רק אם עוד לא שיניתי אותם ידנית
+  // המנהל שינה את השם שלי בזמן שאני מחובר: שדות "מאשר" תמיד עוקבים אחרי השם (הם נעולים לעריכה); שם השומר – רק אם עוד לא שיניתי אותו ידנית
   function applyNameChange(prev, next) {
-    if (!prev || prev === next) return;
-    [formStudent, formVisitor].forEach(f => { if (f.elements.approvedBy.value === prev) f.elements.approvedBy.value = next; });
-    if (state.guardName === prev) {
+    if (prev === next) return;
+    [formStudent, formVisitor].forEach(f => { f.elements.approvedBy.value = next; f.elements.approvedBy.readOnly = !!next; });
+    if (prev && state.guardName === prev) {
       state.guardName = next;
       ls.set('guardName', next);
       $('#guard-name').value = next;
@@ -1175,7 +1189,7 @@
       stop();
       if (!user) { showGate(null); showLogin(true); return; }
       showLogin(false);
-      if (isAdmin()) setAccess('admin'); else watchAccess(user);
+      if (isAdmin()) { setAccess('admin'); watchOwnName(user); } else watchAccess(user);
     });
     setInterval(renderAll, 30000);                       // מעדכן "הגיע הזמן ליציאה" ומעבר יום
     document.addEventListener('visibilitychange', () => { if (!document.hidden) renderAll(); });
