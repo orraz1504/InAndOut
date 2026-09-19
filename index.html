@@ -84,12 +84,14 @@
             <span class="sm:hidden">כניסה ויציאה</span><span class="hidden sm:inline">אישורי כניסה ויציאה</span>
           </p>
         </div>
-        <div class="ms-auto flex items-center gap-2">
-          <span id="role-badge" class="badge hidden bg-brand-100 text-brand-800"></span>
-          <span id="user-name" class="hidden max-w-[8rem] truncate text-sm font-semibold text-slate-600 sm:max-w-[14rem]"></span>
-          <span id="conn" class="badge bg-slate-200 text-slate-600"></span>
-          <button id="btn-admin-login" class="btn btn-ghost btn-sm" data-action="open-login" aria-label="כניסת מנהל">🔑<span class="hidden sm:inline">כניסת מנהל</span></button>
-          <button id="logout" class="btn btn-ghost btn-sm hidden" data-action="logout" aria-label="התנתקות">🚪<span class="hidden sm:inline">התנתקות</span></button>
+        <div class="ms-auto flex min-w-0 items-center gap-2">
+          <div class="hidden min-w-0 items-center gap-2 sm:flex">
+            <span id="role-badge" class="badge hidden shrink-0 bg-brand-100 text-brand-800"></span>
+            <span id="user-name" class="hidden max-w-[10rem] truncate text-sm font-semibold text-slate-600"></span>
+          </div>
+          <span id="conn" class="badge shrink-0 bg-slate-200 text-slate-600"></span>
+          <button id="btn-admin-login" class="btn btn-ghost btn-sm shrink-0" data-action="open-login" aria-label="כניסת מנהל">🔑<span class="hidden sm:inline">כניסת מנהל</span></button>
+          <button id="logout" class="btn btn-ghost btn-sm hidden shrink-0" data-action="logout" aria-label="התנתקות">🚪<span class="hidden sm:inline">התנתקות</span></button>
         </div>
       </div>
     </header>
