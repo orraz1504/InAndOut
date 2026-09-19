@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function me() { return request.auth.token.email.lower(); }
+
+    // אותה רשימה כמו adminEmails ב-firebase-config.js
+    function isAdmin() { return signedIn() && me() in ['or.raz1504@gmail.com']; }
+
+    // משתמש מורשה = יש לו מסמך users/<email> עם status == 'approved' (המנהל מאשר במסך "ניהול")
+    function isApproved() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(me()))
+        && get(/databases/$(database)/documents/users/$(me())).data.status == 'approved';
+    }
+
+    // ── משתמשים ──
+    // כל חשבון Google יכול להתחבר ולפתוח בקשה (status: pending) על האימייל של עצמו בלבד.
+    // רק מנהל משנה סטטוס, מוסיף אימיילים מראש או מוחק.
+    match /users/{userId} {
+      allow read: if isAdmin() || (signedIn() && userId == me());
+      allow create: if signedIn() && userId == me()
+        && request.resource.data.keys().hasOnly(['email', 'name', 'status', 'createdAt'])
+        && request.resource.data.status == 'pending'
+        && request.resource.data.email == me();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // ── נתוני המערכת: מורשים ומנהל; מחיקה – מנהל בלבד ──
+    match /student_exits/{id}   { allow read, create, update: if isAdmin() || isApproved(); allow delete: if isAdmin(); }
+    match /visitor_entries/{id} { allow read, create, update: if isAdmin() || isApproved(); allow delete: if isAdmin(); }
+  }
+}

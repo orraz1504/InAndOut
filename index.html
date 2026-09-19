@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>אישורי כניסה ויציאה</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Heebo', 'system-ui', 'sans-serif'] } } } };
+  </script>
+  <style type="text/tailwindcss">
+    html { -webkit-tap-highlight-color: transparent; }
+    button, summary, .seg { touch-action: manipulation; }
+
+    @layer components {
+      /* ניווט ראשי: תפריט תחתון במובייל, לשוניות בדסקטופ */
+      .navtab     { @apply flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 text-xs font-bold text-slate-500 transition sm:flex-none sm:flex-row sm:gap-2 sm:bg-slate-100 sm:px-6 sm:py-3 sm:text-base sm:hover:bg-slate-200; }
+      .navtab .ico{ @apply text-2xl leading-none sm:text-xl; }
+      .navtab[aria-selected="true"] { @apply bg-indigo-50 text-indigo-700 sm:bg-indigo-600 sm:text-white sm:hover:bg-indigo-600; }
+
+      .tab        { @apply flex-1 rounded-xl bg-slate-100 px-3 py-3 text-base font-bold text-slate-600 transition hover:bg-slate-200 sm:flex-none sm:px-6; }
+      .tab[aria-selected="true"] { @apply bg-indigo-600 text-white shadow hover:bg-indigo-600; }
+      .tab-lg     { @apply py-3.5 text-lg sm:text-xl; }
+      .count      { @apply ms-1 rounded-full bg-slate-300/60 px-2 text-sm; }
+      .tab[aria-selected="true"] .count,
+      .chip[aria-pressed="true"] .count { @apply bg-white/25; }
+      .chip       { @apply rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200; }
+      .chip[aria-pressed="true"] { @apply bg-indigo-600 text-white hover:bg-indigo-600; }
+      .chip-lg    { @apply flex-1 px-5 py-3 text-base font-bold sm:flex-none; }
+
+      .card       { @apply rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6; }
+      .label      { @apply mb-1 block text-sm font-semibold text-slate-700; }
+      .field      { @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200; }
+
+      .seg        { @apply block cursor-pointer rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-center font-bold text-slate-600 peer-checked:border-indigo-600 peer-checked:bg-indigo-50 peer-checked:text-indigo-800 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-300; }
+
+      .btn        { @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-bold transition active:scale-95 disabled:opacity-50; }
+      .btn-primary{ @apply bg-indigo-600 text-white hover:bg-indigo-700; }
+      .btn-green  { @apply bg-emerald-600 text-white hover:bg-emerald-700; }
+      .btn-amber  { @apply bg-amber-500 text-white hover:bg-amber-600; }
+      .btn-ghost  { @apply bg-slate-100 text-slate-700 hover:bg-slate-200; }
+      .btn-danger { @apply bg-red-50 text-red-700 hover:bg-red-100; }
+      .btn-xl     { @apply w-full px-6 py-4 text-xl sm:w-auto sm:min-w-[11rem]; }
+      .btn-sm     { @apply px-3 py-2 text-sm; }
+
+      .badge      { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-3 py-1 text-sm font-bold; }
+      .badge-lg   { @apply px-3.5 py-2 text-base sm:px-4 sm:text-lg; }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 font-sans text-slate-800 antialiased">
+
+  <div id="fatal" class="hidden bg-red-600 p-3 text-center font-bold text-white"></div>
+
+  <!-- כל האפליקציה מוסתרת עד שהמשתמש מחובר ומורשה – מסך ההתחברות נשאר נקי וניטרלי -->
+  <div id="app" class="hidden">
+
+    <div id="demo-banner" class="hidden bg-amber-100 px-4 py-2 text-center text-sm font-semibold text-amber-900">
+      מצב הדגמה: הנתונים נשמרים רק בדפדפן הזה. לסנכרון חי מלאו את פרטי Firebase ב-<code dir="ltr" class="rounded bg-amber-200 px-1">firebase-config.js</code>.
+      <span id="demo-admin-hint" class="block sm:inline"></span>
+    </div>
+
+    <!-- ───────── סרגל עליון ───────── -->
+    <header class="sticky top-0 z-30 bg-white shadow-sm">
+      <div class="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
+        <h1 class="truncate text-lg font-extrabold sm:text-xl">
+          🏫 <span class="sm:hidden">כניסה ויציאה</span><span class="hidden sm:inline">אישורי כניסה ויציאה</span>
+        </h1>
+        <div class="ms-auto flex items-center gap-2">
+          <span id="role-badge" class="badge hidden bg-indigo-100 text-indigo-800"></span>
+          <span id="conn" class="badge bg-slate-200 text-slate-600"></span>
+          <button id="btn-admin-login" class="btn btn-ghost btn-sm" data-action="open-login" aria-label="כניסת מנהל">🔑<span class="hidden sm:inline">כניסת מנהל</span></button>
+          <button id="logout" class="btn btn-ghost btn-sm hidden" data-action="logout" aria-label="התנתקות">🚪<span class="hidden sm:inline">התנתקות</span></button>
+        </div>
+      </div>
+    </header>
+
+    <!-- ניווט ראשי: קבוע בתחתית המסך במובייל (נוח לאגודל). כל לשונית מוצגת רק למי שמורשה אליה -->
+    <nav id="nav" class="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:static sm:border-0 sm:bg-transparent sm:pb-0" role="tablist" aria-label="בחירת מסך">
+      <div class="mx-auto flex max-w-6xl gap-2 p-2 sm:px-4 sm:pb-0 sm:pt-4">
+        <button class="navtab" role="tab" data-action="view" data-view="staff"><span class="ico">📝</span>מסך צוות</button>
+        <button class="navtab" role="tab" data-action="view" data-view="guard"><span class="ico">🛡️</span>עמדת שומר</button>
+        <button class="navtab" role="tab" data-action="view" data-view="records"><span class="ico">📋</span>אישורים</button>
+        <button class="navtab" role="tab" data-action="view" data-view="admin"><span class="ico">👥</span>
+          <span>ניהול <span id="cnt-admin-pending" class="count hidden bg-red-600 text-white">0</span></span></button>
+      </div>
+    </nav>
+
+    <main class="mx-auto max-w-6xl px-4 pb-28 pt-4 sm:pb-8">
+
+      <!-- ═════════════ מסך צוות: טפסי הזנה בלבד ═════════════ -->
+      <section id="view-staff">
+        <div class="sticky top-14 z-20 -mx-4 mb-4 flex gap-2 bg-slate-50/95 px-4 py-2 backdrop-blur" role="tablist">
+          <button class="tab" role="tab" data-action="staff-tab" data-tab="students">🎒 יציאת תלמיד</button>
+          <button class="tab" role="tab" data-action="staff-tab" data-tab="visitors">🪪 כניסת מבקר</button>
+        </div>
+
+        <!-- יציאת תלמיד -->
+        <div id="staff-students">
+          <form id="form-student" class="card" autocomplete="off">
+            <h2 class="mb-4 text-lg font-extrabold">אישור יציאה חדש לתלמיד</h2>
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div><label class="label" for="s-name">שם התלמיד/ה</label>
+                <input id="s-name" name="studentName" class="field" enterkeyhint="next" required></div>
+              <div><label class="label" for="s-grade">כיתה</label>
+                <input id="s-grade" name="grade" class="field" placeholder="למשל: ח'2" enterkeyhint="next" required></div>
+              <div class="sm:col-span-2 lg:col-span-1"><label class="label" for="s-by">שם הגורם המאשר</label>
+                <input id="s-by" name="approvedBy" class="field" enterkeyhint="next" required></div>
+              <div><label class="label" for="s-date">תאריך יציאה</label>
+                <input id="s-date" name="exitDate" type="date" dir="ltr" class="field" required></div>
+              <div><label class="label" for="s-time">שעת יציאה</label>
+                <input id="s-time" name="exitTime" type="time" dir="ltr" class="field" required></div>
+            </div>
+            <button class="btn btn-primary mt-5 w-full py-4 text-lg sm:w-auto" type="submit">➕ הוסף אישור יציאה</button>
+          </form>
+        </div>
+
+        <!-- כניסת מבקר -->
+        <div id="staff-visitors">
+          <form id="form-visitor" class="card" autocomplete="off">
+            <h2 class="mb-4 text-lg font-extrabold">אישור כניסה חדש למבקר</h2>
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div><label class="label" for="v-first">שם פרטי</label>
+                <input id="v-first" name="firstName" class="field" enterkeyhint="next" required></div>
+              <div><label class="label" for="v-last">שם משפחה</label>
+                <input id="v-last" name="lastName" class="field" enterkeyhint="next" required></div>
+              <div class="sm:col-span-2 lg:col-span-1"><label class="label" for="v-id">תעודת זהות / דרכון</label>
+                <input id="v-id" name="idNumber" class="field" minlength="5" inputmode="text" enterkeyhint="next" required></div>
+              <div class="sm:col-span-2"><label class="label" for="v-purpose">מטרת הכניסה</label>
+                <input id="v-purpose" name="purpose" class="field" enterkeyhint="next" required></div>
+              <div><label class="label" for="v-date">תאריך הביקור</label>
+                <input id="v-date" name="visitDate" type="date" dir="ltr" class="field" required></div>
+              <div class="sm:col-span-2 lg:col-span-1"><label class="label" for="v-by">שם המאשר מבית הספר</label>
+                <input id="v-by" name="approvedBy" class="field" enterkeyhint="done" required></div>
+
+              <fieldset>
+                <legend class="label">נדרש ליווי?</legend>
+                <div class="grid grid-cols-2 gap-2">
+                  <label><input type="radio" name="escortRequired" value="yes" class="peer sr-only" required><span class="seg">כן</span></label>
+                  <label><input type="radio" name="escortRequired" value="no" class="peer sr-only" required><span class="seg">לא</span></label>
+                </div>
+              </fieldset>
+              <fieldset>
+                <legend class="label">רשאי להיכנס עם נשק?</legend>
+                <div class="grid grid-cols-2 gap-2">
+                  <label><input type="radio" name="armedAllowed" value="yes" class="peer sr-only" required><span class="seg">כן</span></label>
+                  <label><input type="radio" name="armedAllowed" value="no" class="peer sr-only" required><span class="seg">לא</span></label>
+                </div>
+              </fieldset>
+            </div>
+            <p class="mt-3 text-sm text-slate-500">שדות הליווי והנשק אינם מסומנים מראש בכוונה – יש לבחור אותם במפורש.</p>
+            <button class="btn btn-primary mt-4 w-full py-4 text-lg sm:w-auto" type="submit">➕ הוסף אישור כניסה</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- ═════════════ טבלאות אישורים (מנהל בלבד) ═════════════ -->
+      <section id="view-records" class="hidden">
+        <div class="sticky top-14 z-20 -mx-4 mb-4 flex gap-2 bg-slate-50/95 px-4 py-2 backdrop-blur" role="tablist">
+          <button class="tab" role="tab" data-action="rec-tab" data-tab="students">🎒 יציאות תלמידים <span class="count" id="cnt-rec-students">0</span></button>
+          <button class="tab" role="tab" data-action="rec-tab" data-tab="visitors">🪪 מבקרים <span class="count" id="cnt-rec-visitors">0</span></button>
+        </div>
+
+        <div id="rec-students" class="card">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-lg font-extrabold">אישורי יציאה</h2>
+            <div class="flex gap-2">
+              <button class="chip" data-action="filter" data-filter="today">היום</button>
+              <button class="chip" data-action="filter" data-filter="all">הכל</button>
+            </div>
+          </div>
+          <div id="rec-students-table"></div>
+        </div>
+
+        <div id="rec-visitors" class="card">
+          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 class="text-lg font-extrabold">אישורי כניסה למבקרים</h2>
+            <div class="flex gap-2">
+              <button class="chip" data-action="filter" data-filter="today">היום</button>
+              <button class="chip" data-action="filter" data-filter="all">הכל</button>
+            </div>
+          </div>
+          <div id="rec-visitors-table"></div>
+        </div>
+      </section>
+
+      <!-- ═════════════ ניהול משתמשים (מנהל בלבד) ═════════════ -->
+      <section id="view-admin" class="hidden space-y-5">
+        <form id="form-user" class="card" autocomplete="off">
+          <h2 class="mb-1 text-lg font-extrabold">הרשאת גישה למשתמש</h2>
+          <p class="mb-4 text-sm text-slate-500">
+            כל חשבון Google יכול להתחבר, אבל רואה נתונים רק אחרי שהמנהל מאשר אותו ומגדיר תפקיד.
+            <b>צוות</b> – מזין אישורים בלבד. <b>שומר</b> – עמדת שומר בלבד. אפשר גם לאשר אימייל מראש.
+          </p>
+          <div class="flex flex-col gap-2 sm:flex-row">
+            <input name="email" type="email" dir="ltr" class="field sm:flex-1" placeholder="name@gmail.com" aria-label="אימייל" required>
+            <select name="role" class="field sm:w-auto" aria-label="תפקיד" required>
+              <option value="staff">📝 צוות</option>
+              <option value="guard">🛡️ שומר</option>
+            </select>
+            <button class="btn btn-primary py-3 sm:shrink-0" type="submit">➕ הוסף ואשר</button>
+          </div>
+        </form>
+        <div id="users-list" class="space-y-6"></div>
+      </section>
+
+      <!-- ═════════════ עמדת שומר ═════════════ -->
+      <section id="view-guard" class="hidden">
+        <div class="card mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 p-3 sm:p-4">
+          <label for="guard-name" class="text-base font-extrabold sm:text-lg">👮 שם השומר:</label>
+          <input id="guard-name" class="field min-w-0 flex-1 text-lg sm:max-w-xs" placeholder="הקלידו את שמכם" autocomplete="name">
+          <p id="guard-name-warn" class="hidden w-full text-sm font-bold text-red-600">יש להזין שם לפני רישום כניסה / יציאה</p>
+        </div>
+
+        <div class="sticky top-14 z-20 -mx-4 mb-4 flex gap-2 bg-slate-50/95 px-4 py-2 backdrop-blur" role="tablist">
+          <button class="tab tab-lg" role="tab" data-action="guard-tab" data-tab="students">🎒 יציאות <span class="count" id="cnt-guard-students">0</span></button>
+          <button class="tab tab-lg" role="tab" data-action="guard-tab" data-tab="visitors">🪪 מבקרים <span class="count" id="cnt-guard-visitors">0</span></button>
+        </div>
+
+        <!-- שומר: תלמידים -->
+        <div id="guard-students-panel">
+          <div class="mb-4 flex gap-2">
+            <button class="chip chip-lg" data-action="guard-range" data-range="today">היום <span class="count" id="cnt-range-today">0</span></button>
+            <button class="chip chip-lg" data-action="guard-range" data-range="future">עתידיות <span class="count" id="cnt-range-future">0</span></button>
+          </div>
+          <div id="guard-students-today">
+            <div id="guard-students" class="grid gap-3 lg:grid-cols-2"></div>
+            <details class="mt-6 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+              <summary class="cursor-pointer text-lg font-bold">יצאו היום (<span id="guard-students-done-count">0</span>)</summary>
+              <div id="guard-students-done" class="mt-3 divide-y divide-slate-100"></div>
+            </details>
+          </div>
+          <div id="guard-students-future" class="space-y-6"></div>
+        </div>
+
+        <!-- שומר: מבקרים -->
+        <div id="guard-visitors-panel">
+          <input id="visitor-search" type="search" inputmode="search" autocomplete="off" enterkeyhint="search"
+                 class="field mb-4 py-4 text-lg sm:text-xl" placeholder="🔎 חיפוש לפי תעודת זהות או שם">
+          <div id="guard-visitors" class="space-y-6"></div>
+          <details class="mt-6 rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+            <summary class="cursor-pointer text-lg font-bold">יצאו (<span id="guard-visitors-left-count">0</span>)</summary>
+            <div id="guard-visitors-left" class="mt-3 grid gap-3 lg:grid-cols-2"></div>
+          </details>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- התחברות: מסך נקי וניטרלי, בלי שום דבר מהאתר מאחור. בהדגמה – חלון "כניסת מנהל" שאפשר לסגור -->
+  <div id="login" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-50 p-4">
+    <form id="login-form" class="card w-full max-w-sm space-y-4 shadow-xl">
+      <div class="flex items-center justify-between gap-2">
+        <h2 id="login-title" class="text-xl font-extrabold">התחברות</h2>
+        <button id="login-close" type="button" class="btn btn-ghost btn-sm" data-action="close-login" aria-label="סגירה">✕</button>
+      </div>
+      <button id="btn-google" type="button" class="btn w-full border border-slate-300 bg-white py-3.5 text-base text-slate-700 hover:bg-slate-50" data-action="google-login">
+        <span class="text-xl font-extrabold text-blue-600">G</span> התחברות עם Google
+      </button>
+      <div id="login-password-part" class="space-y-4">   <!-- הדגמה בלבד -->
+        <div><label class="label" for="l-email">אימייל</label>
+          <input id="l-email" name="email" type="email" dir="ltr" class="field" autocomplete="username" required></div>
+        <div><label class="label" for="l-pass">סיסמה</label>
+          <input id="l-pass" name="password" type="password" dir="ltr" class="field" autocomplete="current-password" required></div>
+        <button class="btn btn-primary w-full py-4 text-lg" type="submit">כניסה</button>
+      </div>
+      <p id="login-err" class="text-sm font-bold text-red-600"></p>
+    </form>
+  </div>
+
+  <!-- משתמש מחובר שעדיין לא אושר / נחסם -->
+  <div id="gate" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-50 p-4">
+    <div class="card w-full max-w-sm space-y-3 text-center shadow-xl">
+      <div id="gate-icon" class="text-5xl"></div>
+      <h2 id="gate-title" class="text-xl font-extrabold"></h2>
+      <p id="gate-text" class="text-slate-600"></p>
+      <p class="text-sm text-slate-500">מחובר/ת כ-<bdi id="gate-email" class="font-bold"></bdi></p>
+      <button class="btn btn-ghost w-full" data-action="logout">התנתקות / החלפת חשבון</button>
+    </div>
+  </div>
+
+  <div id="toasts" class="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4 sm:bottom-4"></div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
