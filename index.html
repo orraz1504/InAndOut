@@ -185,32 +185,18 @@
         <div class="card">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-lg font-extrabold">🎒 אישורי יציאה</h2>
-            <div class="flex flex-wrap gap-2">
-              <input id="rec-students-search" type="search" class="field !w-44 !py-1.5 !text-sm" placeholder="🔎 חיפוש">
-              <select id="rec-students-sort" class="field !w-auto !py-1.5 !text-sm" aria-label="מיון">
-                <option value="date-desc">תאריך: חדש ← ישן</option>
-                <option value="date-asc">תאריך: ישן ← חדש</option>
-                <option value="name">לפי שם</option>
-                <option value="status">לפי סטטוס</option>
-              </select>
-            </div>
+            <button class="btn btn-ghost btn-sm" data-action="export" data-kind="students">📥 ייצוא לאקסל</button>
           </div>
+          <div id="rec-students-controls" class="mb-4"></div>
           <div id="rec-students-table"></div>
         </div>
 
         <div class="card">
           <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-lg font-extrabold">🪪 אישורי כניסה למבקרים</h2>
-            <div class="flex flex-wrap gap-2">
-              <input id="rec-visitors-search" type="search" class="field !w-44 !py-1.5 !text-sm" placeholder="🔎 חיפוש">
-              <select id="rec-visitors-sort" class="field !w-auto !py-1.5 !text-sm" aria-label="מיון">
-                <option value="date-desc">תאריך: חדש ← ישן</option>
-                <option value="date-asc">תאריך: ישן ← חדש</option>
-                <option value="name">לפי שם</option>
-                <option value="status">לפי סטטוס</option>
-              </select>
-            </div>
+            <button class="btn btn-ghost btn-sm" data-action="export" data-kind="visitors">📥 ייצוא לאקסל</button>
           </div>
+          <div id="rec-visitors-controls" class="mb-4"></div>
           <div id="rec-visitors-table"></div>
         </div>
       </section>

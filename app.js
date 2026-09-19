@@ -137,8 +137,9 @@
     students: [], visitors: [], users: [], query: '',
     guardName: ls.get('guardName'),
     user: null, myRole: null,
-    recStudents: { query: '', sort: 'date-desc' },
-    recVisitors: { query: '', sort: 'date-desc' },
+    // סינון ומיון של רשימת האישורים: טקסט חופשי, סטטוס, תאריך מדויק (YYYY-MM-DD) או חודש (YYYY-MM)
+    recStudents: { query: '', status: '', date: '', month: '', sort: 'date-desc' },
+    recVisitors: { query: '', status: '', date: '', month: '', sort: 'date-desc' },
   };
   // אדמין = ברשימת adminEmails הקבועה (bootstrap), או שהמנהל הנוכחי הגדיר לו role: 'admin' במסך ניהול
   const isAdmin = () => !!state.user && (
@@ -219,49 +220,141 @@
       <p class="mt-2 text-lg font-bold">הרשימה זמינה למנהל בלבד</p>
       <button class="btn btn-primary mt-4" data-action="open-login">🔑 כניסת מנהל</button></div>`;
 
-  // רשימה מקיפה (כל הרשומות, לא רק היום) עם חיפוש ומיון: לפי חודש (ברירת מחדל), לפי שם, או לפי סטטוס.
+  // רשימה מקיפה (כל הרשומות, לא רק היום). סינון: חיפוש חופשי (שם / תאריך), סטטוס, תאריך מדויק, חודש.
+  // מיון: תאריך (חדש→ישן / ישן→חדש, מקובץ לפי חודש) או לפי שם.
   const norm = s => String(s ?? '').toLowerCase();
-  const matchesQuery = (fields, q) => !q || fields.some(f => norm(f).includes(q));
+  const monthLabels = new Map();
   const monthLabel = ym => {
-    const [y, m] = ym.split('-').map(Number);
-    return new Date(y, m - 1, 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+    if (!monthLabels.has(ym)) {
+      const [y, m] = ym.split('-').map(Number);
+      monthLabels.set(ym, new Date(y, m - 1, 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' }));
+    }
+    return monthLabels.get(ym);
   };
-  function groupByMonth(list, dateKey, dir) {
-    const groups = {};
-    list.forEach(item => (groups[item[dateKey].slice(0, 7)] ||= []).push(item));
-    const keys = Object.keys(groups).sort();
-    if (dir === -1) keys.reverse();
-    return keys.map(ym => ({ label: monthLabel(ym), items: groups[ym] }));
+
+  const REC = {
+    students: {
+      cfg: state.recStudents, all: () => state.students, dateKey: 'exitDate',
+      statuses: Object.values(S),
+      hay: s => `${s.studentName} ${s.grade}`,                      // חיפוש לפי שם (וכיתה) בלבד – לא לפי המאשר
+      nameKey: s => s.studentName, dateSort: s => s.exitDate + s.exitTime,
+    },
+    visitors: {
+      cfg: state.recVisitors, all: () => state.visitors, dateKey: 'visitDate',
+      statuses: Object.values(V),
+      hay: v => `${v.firstName} ${v.lastName} ${v.idNumber}`,
+      nameKey: v => `${v.firstName} ${v.lastName}`, dateSort: v => v.visitDate + String(v.createdAt).padStart(15, '0'),
+    },
+  };
+
+  // כל מה שאפשר להקליד כדי למצוא תאריך: 15/09/2026, 15/9/2026, 09/2026, 2026-09-15, "ספטמבר"
+  const dateHay = ds => {
+    const [y, m, d] = String(ds || '').split('-');
+    return y && m && d ? `${d}/${m}/${y} ${+d}/${+m}/${y} ${ds} ${monthLabel(`${y}-${m}`)}` : '';
+  };
+  const filtersActive = cfg => !!(cfg.query.trim() || cfg.status || cfg.date || cfg.month);
+
+  // חיפוש: כל מילה בשאילתה חייבת להופיע (בכל סדר), כך ש"דנה כהן" ו"כהן דנה" מוצאים מבקר עם שם פרטי ושם משפחה נפרדים
+  function recList(kind) {
+    const r = REC[kind], cfg = r.cfg;
+    const tokens = norm(cfg.query).split(/\s+/).filter(Boolean);
+    const filtered = r.all().filter(x => {
+      const ds = x[r.dateKey] || '';
+      if (cfg.status && x.status !== cfg.status) return false;
+      if (cfg.date && ds !== cfg.date) return false;
+      if (cfg.month && ds.slice(0, 7) !== cfg.month) return false;
+      if (!tokens.length) return true;
+      const hay = norm(`${r.hay(x)} ${dateHay(ds)}`);
+      return tokens.every(t => hay.includes(t));
+    });
+    return cfg.sort === 'name'
+      ? filtered.sort((a, b) => r.nameKey(a).localeCompare(r.nameKey(b), 'he'))
+      : sortBy(filtered, r.dateSort, cfg.sort === 'date-asc' ? 1 : -1);
+  }
+
+  // הרשימה כבר ממוינת לפי תאריך, לכן החודשים רציפים ומקבלים את סדר ההופעה (חדש→ישן או ישן→חדש)
+  function groupByMonth(list, dateKey) {
+    const groups = new Map();
+    list.forEach(item => {
+      const ym = String(item[dateKey]).slice(0, 7);
+      if (!groups.has(ym)) groups.set(ym, []);
+      groups.get(ym).push(item);
+    });
+    return [...groups].map(([ym, items]) => ({ label: monthLabel(ym), items }));
   }
   const monthSection = (label, count, body) => `<section class="mb-6 last:mb-0">
       <h3 class="mb-2 text-base font-extrabold text-brand-700">${label} <span class="text-sm font-semibold text-slate-500">(${count})</span></h3>
       ${body}</section>`;
-  // מרנדר לפי מצב המיון: תאריך → מקובץ לפי חודש; שם/סטטוס → רשימה שטוחה ממוינת.
-  function renderRecList(box, list, cfg, headers, rowHtml, cardHtml, dateKey, dateSortKey, emptyMsg) {
-    if (!list.length) { box.innerHTML = empty(emptyMsg); return; }
-    if (cfg.sort === 'name' || cfg.sort === 'status') {
-      const sorted = cfg.sort === 'status' ? sortBy(list, x => x.status) : sortBy(list, dateSortKey.name);
-      box.innerHTML = listView(headers, sorted.map(rowHtml), sorted.map(cardHtml), '');
+
+  function renderRecList(kind, headers, rowHtml, cardHtml, emptyMsg) {
+    const r = REC[kind], cfg = r.cfg, box = $(`#rec-${kind}-table`);
+    const list = recList(kind);
+    const active = filtersActive(cfg);
+    $(`#rec-${kind}-count`).textContent = active ? `${list.length} מתוך ${r.all().length}` : `${list.length} רשומות`;
+    $(`#rec-${kind}-clear`).classList.toggle('hidden', !active);
+    if (!list.length) { box.innerHTML = empty(active ? 'לא נמצאו תוצאות' : emptyMsg); return; }
+    if (cfg.sort === 'name') {
+      box.innerHTML = listView(headers, list.map(rowHtml), list.map(cardHtml), '');
       return;
     }
-    const dir = cfg.sort === 'date-asc' ? 1 : -1;
-    const sorted = sortBy(list, dateSortKey.date, dir);
-    const groups = groupByMonth(sorted, dateKey, dir);
-    box.innerHTML = groups.map(g => monthSection(g.label, g.items.length,
+    box.innerHTML = groupByMonth(list, r.dateKey).map(g => monthSection(g.label, g.items.length,
       listView(headers, g.items.map(rowHtml), g.items.map(cardHtml), ''))).join('');
   }
+
+  // סרגל הסינון נבנה פעם אחת (לא בכל רינדור) כדי שהפוקוס והטקסט בשדה החיפוש לא יאבדו
+  function initRecControls(kind) {
+    const r = REC[kind], cfg = r.cfg;
+    const id = n => `rec-${kind}-${n}`;
+    const small = '!w-auto !py-1.5 !text-sm';
+    const dateField = (n, label, type) => `<label class="flex items-center gap-1.5 text-sm font-semibold text-slate-500">${label}
+      <input id="${id(n)}" type="${type}" dir="ltr" class="field ${small}"></label>`;
+    $(`#${id('controls')}`).innerHTML = `<div class="flex flex-wrap items-center gap-2">
+      <input id="${id('q')}" type="search" class="field !w-full sm:!w-56 !py-1.5 !text-sm" placeholder="🔎 חיפוש לפי שם או תאריך" aria-label="חיפוש">
+      <select id="${id('status')}" class="field ${small}" aria-label="סטטוס">
+        <option value="">כל הסטטוסים</option>
+        ${r.statuses.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+      </select>
+      ${dateField('date', 'תאריך', 'date')}
+      ${dateField('month', 'חודש', 'month')}
+      <select id="${id('sort')}" class="field ${small}" aria-label="מיון">
+        <option value="date-desc">מיון: החדש ביותר קודם</option>
+        <option value="date-asc">מיון: הישן ביותר קודם</option>
+        <option value="name">מיון: לפי שם (א-ת)</option>
+      </select>
+      <button id="${id('clear')}" type="button" class="btn btn-ghost btn-sm hidden">✕ ניקוי סינון</button>
+      <span id="${id('count')}" class="ms-auto text-sm font-semibold text-slate-500"></span>
+    </div>`;
+    const el = n => $(`#${id(n)}`);
+    const bind = (n, event, key, after) => el(n).addEventListener(event, e => {
+      cfg[key] = e.target.value;
+      if (after) after();
+      renderRecords(kind);
+    });
+    bind('q', 'input', 'query');
+    bind('status', 'change', 'status');
+    bind('sort', 'change', 'sort');
+    // תאריך מדויק וחודש סותרים זה את זה – בחירה באחד מנקה את השני
+    bind('date', 'change', 'date', () => { cfg.month = ''; el('month').value = ''; });
+    bind('month', 'change', 'month', () => { cfg.date = ''; el('date').value = ''; });
+    el('clear').addEventListener('click', () => {
+      Object.assign(cfg, { query: '', status: '', date: '', month: '' });
+      ['q', 'status', 'date', 'month'].forEach(n => { el(n).value = ''; });
+      renderRecords(kind);
+    });
+  }
+  const renderRecords = kind => (kind === 'students' ? renderStaffStudents : renderStaffVisitors)();
 
   function renderStaffStudents() {
     const box = $('#rec-students-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
-    const cfg = state.recStudents;
-    const q = norm(cfg.query.trim());
-    const filtered = state.students.filter(s => matchesQuery([s.studentName, s.grade, s.approvedBy], q));
     const tone = { [S.PENDING]: 'bg-amber-100 text-amber-800', [S.EXITED]: 'bg-emerald-100 text-emerald-800', [S.CANCELLED]: 'bg-slate-200 text-slate-600' };
     const detail = s => s.status === S.EXITED
       ? `<div class="mt-1 text-sm text-slate-500">ב-${fmtTs(s.actualExitAt)} · שומר: ${esc(s.guardName)}</div>` : '';
     const cancelBtn = (s, cls = '') => s.status === S.PENDING
       ? `<button class="btn btn-danger btn-sm ${cls}" data-action="student-cancel" data-id="${esc(s.id)}">ביטול אישור</button>` : '';
+    // אישור שבוטל נשאר ברשימה כתיעוד; מכאן אפשר למחוק אותו לצמיתות מהמסד
+    const deleteBtn = (s, cls = '') => s.status === S.CANCELLED
+      ? `<button class="btn btn-danger btn-sm ${cls}" data-action="student-delete" data-id="${esc(s.id)}">🗑️ מחיקה לצמיתות</button>` : '';
     const editBtn = (s, cls = '') => `<button class="btn btn-ghost btn-sm ${cls}" data-action="student-edit" data-id="${esc(s.id)}">✏️ עריכה</button>`;
     const rowHtml = s => `<tr>
         ${td(esc(s.studentName), 'font-bold')}
@@ -269,23 +362,17 @@
         ${td(`${fmtDate(s.exitDate)} · ${esc(s.exitTime)}`)}
         ${td(esc(s.approvedBy))}
         ${td(pill(s.status, tone[s.status] || '') + detail(s))}
-        ${td(`<div class="flex flex-wrap gap-2">${editBtn(s)}${cancelBtn(s)}</div>`)}</tr>`;
+        ${td(`<div class="flex flex-wrap gap-2">${editBtn(s)}${cancelBtn(s)}${deleteBtn(s)}</div>`)}</tr>`;
     const cardHtml = s => miniCard(
       `<div class="text-base font-bold">${esc(s.studentName)}</div>${pill(s.status, tone[s.status] || '')}`,
       `כיתה ${esc(s.grade)} · ${fmtDate(s.exitDate)} ${esc(s.exitTime)} · אישר/ה: ${esc(s.approvedBy)}`,
-      detail(s), `<div class="flex gap-2">${editBtn(s, 'flex-1 py-3')}${cancelBtn(s, 'flex-1 py-3')}</div>`);
-    renderRecList(box, filtered, cfg, ['תלמיד/ה', 'כיתה', 'יציאה מאושרת', 'מאשר/ת', 'סטטוס', ''], rowHtml, cardHtml,
-      'exitDate', { name: s => s.studentName, date: s => s.exitDate + s.exitTime },
-      q ? 'לא נמצאו תוצאות' : 'אין אישורי יציאה');
+      detail(s), `<div class="flex gap-2">${editBtn(s, 'flex-1 py-3')}${cancelBtn(s, 'flex-1 py-3')}${deleteBtn(s, 'flex-1 py-3')}</div>`);
+    renderRecList('students', ['תלמיד/ה', 'כיתה', 'יציאה מאושרת', 'מאשר/ת', 'סטטוס', ''], rowHtml, cardHtml, 'אין אישורי יציאה');
   }
 
   function renderStaffVisitors() {
     const box = $('#rec-visitors-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
-    const cfg = state.recVisitors;
-    const q = norm(cfg.query.trim());
-    const filtered = state.visitors.filter(v =>
-      matchesQuery([v.firstName, v.lastName, v.idNumber, v.purpose, v.approvedBy, v.notes], q));
     const tone = { [V.PENDING]: 'bg-amber-100 text-amber-800', [V.INSIDE]: 'bg-emerald-100 text-emerald-800', [V.LEFT]: 'bg-slate-200 text-slate-600' };
     const detail = v => v.entryAt
       ? `<div class="mt-1 text-sm text-slate-500">נכנס ${fmtTs(v.entryAt)}${v.exitAt ? ` · יצא ${fmtTs(v.exitAt)}` : ''} · שומר: ${esc(v.guardName)}</div>` : '';
@@ -312,9 +399,7 @@
       `<div class="mt-2 flex flex-wrap gap-2">${escort(v)}${armed(v)}</div>${detail(v)}`
       + (v.notes ? `<div class="mt-2 whitespace-pre-wrap rounded-lg bg-amber-50 p-2 text-sm text-amber-900">📝 ${esc(v.notes)}</div>` : ''),
       `<div class="flex gap-2">${editBtn(v, 'flex-1 py-3')}${deleteBtn(v, 'flex-1 py-3')}</div>`);
-    renderRecList(box, filtered, cfg, ['מבקר/ת', 'ת"ז', 'מטרה', 'ליווי', 'נשק', 'מאשר/ת', 'תאריך', 'הערות', 'סטטוס', ''], rowHtml, cardHtml,
-      'visitDate', { name: v => `${v.firstName} ${v.lastName}`, date: v => v.visitDate + String(v.createdAt).padStart(15, '0') },
-      q ? 'לא נמצאו תוצאות' : 'אין אישורי כניסה');
+    renderRecList('visitors', ['מבקר/ת', 'ת"ז', 'מטרה', 'ליווי', 'נשק', 'מאשר/ת', 'תאריך', 'הערות', 'סטטוס', ''], rowHtml, cardHtml, 'אין אישורי כניסה');
   }
 
   // ───────── עריכת רשומה (מנהל בלבד) ─────────
@@ -644,6 +729,82 @@
       'האישור בוטל'));
   }
 
+  // מחיקה סופית של אישור שבוטל (לא ניתנת לשחזור). רק אישורים בסטטוס "בוטל" – גם אם הרשימה במסך התיישנה.
+  function studentDelete(id) {
+    const s = state.students.find(x => x.id === id);
+    if (!s || s.status !== S.CANCELLED) return;
+    if (!confirm(`למחוק לצמיתות את אישור היציאה המבוטל של ${s.studentName} (${fmtDate(s.exitDate)})?\nלא ניתן לשחזר.`)) return;
+    once(id, async () => {
+      if (await run(() => store.remove(COL.students, id).then(() => true))) toast('האישור נמחק לצמיתות');
+    });
+  }
+
+  // ───────── ייצוא לאקסל ─────────
+  // מייצא את מה שמוצג כרגע ברשימה (אחרי סינון, באותו סדר). SheetJS נטען רק בלחיצה הראשונה.
+  const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  const XLSX_SRI = 'sha512-r22gChDnGvBylk90+2e/ycr3RVrDi8DIOkIGNhJlKfuyQM4tIRAI062MaV8sfjQKYVGjOBaZBOA87z+IhZE9DA==';
+  let xlsxLoading = null;
+  function loadXlsx() {
+    if (window.XLSX) return Promise.resolve(window.XLSX);
+    xlsxLoading ||= new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = XLSX_URL;
+      s.integrity = XLSX_SRI;
+      s.crossOrigin = 'anonymous';
+      s.onload = () => resolve(window.XLSX);
+      s.onerror = () => { xlsxLoading = null; s.remove(); reject(new Error('טעינת רכיב הייצוא נכשלה – בדקו חיבור לאינטרנט')); };
+      document.head.append(s);
+    });
+    return xlsxLoading;
+  }
+
+  // תאים אמיתיים של אקסל (תאריך/שעה מספריים) כדי שאפשר יהיה למיין ולסנן שם. הסידורי מחושב ידנית – בלי הסטת אזור זמן.
+  const EXCEL_EPOCH_DAYS = 25569;   // ימים מ-1899-12-30 עד 1970-01-01
+  const xlDate = ds => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ds || '');
+    return m ? { t: 'n', v: Date.UTC(+m[1], +m[2] - 1, +m[3]) / 864e5 + EXCEL_EPOCH_DAYS, z: 'dd/mm/yyyy' } : (ds || null);
+  };
+  const xlTime = hm => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(hm || '');
+    return m ? { t: 'n', v: (+m[1] * 60 + +m[2]) / 1440, z: 'hh:mm' } : (hm || null);
+  };
+  const xlStamp = ms => ms
+    ? { t: 'n', v: (ms - new Date(ms).getTimezoneOffset() * 60000) / 864e5 + EXCEL_EPOCH_DAYS, z: 'dd/mm/yyyy hh:mm' } : null;
+  const yesNo = b => (b ? 'כן' : 'לא');
+
+  const EXPORTS = {
+    students: {
+      sheet: 'אישורי יציאה', file: 'אישורי-יציאה',
+      cols: [['תלמיד/ה', 22], ['כיתה', 8], ['תאריך יציאה', 13], ['שעת יציאה', 11], ['מאשר/ת', 20], ['סטטוס', 14], ['יצא בפועל', 18], ['שומר', 18]],
+      row: s => [s.studentName, s.grade, xlDate(s.exitDate), xlTime(s.exitTime), s.approvedBy, s.status, xlStamp(s.actualExitAt), s.guardName || null],
+    },
+    visitors: {
+      sheet: 'אישורי כניסה', file: 'אישורי-כניסה',
+      cols: [['שם פרטי', 14], ['שם משפחה', 14], ['ת"ז / דרכון', 14], ['מטרה', 24], ['ליווי', 8], ['נשק', 8], ['מאשר/ת', 20], ['תאריך ביקור', 13],
+        ['הערות', 30], ['סטטוס', 14], ['נכנס', 18], ['יצא', 18], ['שומר כניסה', 16], ['שומר יציאה', 16]],
+      row: v => [v.firstName, v.lastName, v.idNumber, v.purpose, yesNo(v.escortRequired), yesNo(v.armedAllowed), v.approvedBy, xlDate(v.visitDate),
+        v.notes || null, v.status, xlStamp(v.entryAt), xlStamp(v.exitAt), v.guardName || null, v.exitGuardName || null],
+    },
+  };
+
+  function exportRecords(kind) {
+    if (!isAdmin()) return;
+    const list = recList(kind);
+    if (!list.length) return toast('אין רשומות לייצוא', 'err');
+    once('export:' + kind, async () => {
+      const XLSX = await run(loadXlsx);
+      if (!XLSX) return;
+      const spec = EXPORTS[kind];
+      const ws = XLSX.utils.aoa_to_sheet([spec.cols.map(c => c[0]), ...list.map(spec.row)]);
+      ws['!cols'] = spec.cols.map(c => ({ wch: c[1] }));
+      const wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };                       // גיליון מימין לשמאל
+      XLSX.utils.book_append_sheet(wb, ws, spec.sheet);
+      XLSX.writeFile(wb, `${spec.file}_${todayStr()}.xlsx`);
+      toast(`יוצאו ${list.length} רשומות לאקסל`);
+    });
+  }
+
   function visitorEnter(id) {
     const v = state.visitors.find(x => x.id === id);
     const guard = v && requireGuard();
@@ -714,6 +875,8 @@
       case 'student-exit': studentExit(id); break;
       case 'student-undo': studentUndo(id); break;
       case 'student-cancel': studentCancel(id); break;
+      case 'student-delete': studentDelete(id); break;
+      case 'export': exportRecords(el.dataset.kind); break;
       case 'visitor-enter': visitorEnter(id); break;
       case 'visitor-leave': visitorLeave(id); break;
       case 'visitor-delete': visitorDelete(id); break;
@@ -746,10 +909,8 @@
   });
   $('#visitor-search').addEventListener('input', e => { state.query = e.target.value; renderGuardVisitors(); });
 
-  $('#rec-students-search').addEventListener('input', e => { state.recStudents.query = e.target.value; renderStaffStudents(); });
-  $('#rec-students-sort').addEventListener('change', e => { state.recStudents.sort = e.target.value; renderStaffStudents(); });
-  $('#rec-visitors-search').addEventListener('input', e => { state.recVisitors.query = e.target.value; renderStaffVisitors(); });
-  $('#rec-visitors-sort').addEventListener('change', e => { state.recVisitors.sort = e.target.value; renderStaffVisitors(); });
+  initRecControls('students');
+  initRecControls('visitors');
 
   // ───────── טפסי צוות ─────────
   const formStudent = $('#form-student');
