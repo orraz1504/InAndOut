@@ -29,10 +29,6 @@
     return (x < y ? -1 : x > y ? 1 : 0) * dir;
   });
   const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  const ls = {
-    get(k, d = '') { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch { /* מצב פרטי – מתעלמים */ } },
-  };
 
   const adminEmails = () => (CFG.adminEmails || []).map(e => String(e).trim().toLowerCase());
 
@@ -135,7 +131,7 @@
   const state = {
     view: 'staff', staffTab: 'students', guardTab: 'students', guardRange: 'today',
     students: [], visitors: [], users: [], query: '',
-    guardName: ls.get('guardName'),
+    guardName: '',   // שם השומר – נגזר מהשם של המשתמש המחובר (syncGuardName), לא מוקלד
     user: null, myRole: null, myName: '',   // myName: השם שהמנהל קבע לי (users/<email>.name) – גובר על שם חשבון ה-Google
     // סינון ומיון של רשימת האישורים: טקסט חופשי, סטטוס, תאריך מדויק (YYYY-MM-DD) או חודש (YYYY-MM)
     recStudents: { query: '', status: '', date: '', month: '', sort: 'date-desc' },
@@ -701,7 +697,7 @@
   }
 
   function requireGuard() {
-    const name = state.guardName.trim();
+    const name = (myDisplayName() || state.guardName).trim();
     if (!name) {
       toast('יש להזין את שם השומר לפני ביצוע הפעולה', 'err');
       $('#guard-name').focus();
@@ -917,10 +913,9 @@
     }
   });
 
-  $('#guard-name').value = state.guardName;
+  // שם השומר נעול (נגזר מהשם של המשתמש). ההאזנה רק למקרה הקצה שאין למשתמש שום שם – אז אפשר להקליד
   $('#guard-name').addEventListener('input', e => {
     state.guardName = e.target.value;
-    ls.set('guardName', state.guardName.trim());
     renderCounts();
   });
   $('#visitor-search').addEventListener('input', e => { state.query = e.target.value; renderGuardVisitors(); });
@@ -1106,31 +1101,29 @@
     state.students = [];
     state.visitors = [];
     state.users = [];
-    if (!state.user) { state.myRole = null; state.myName = ''; }
+    if (!state.user) { state.myRole = null; state.myName = ''; state.guardName = ''; $('#guard-name').value = ''; }
     $('#app').classList.add('hidden');
     renderAll();
   }
 
-  // המנהל שינה את השם שלי בזמן שאני מחובר: שדות "מאשר" תמיד עוקבים אחרי השם (הם נעולים לעריכה); שם השומר – רק אם עוד לא שיניתי אותו ידנית
+  // שם השומר בעמדת השומר = השם של המשתמש המחובר, ונעול לעריכה. כללי Firestore אוכפים זאת בשרת (רק בשם שלך אפשר לרשום כניסה / יציאה)
+  function syncGuardName() {
+    const name = myDisplayName(), el = $('#guard-name');
+    if (name) { state.guardName = name; el.value = name; }
+    el.readOnly = !!name;
+    renderCounts();
+  }
+
+  // המנהל שינה את השם שלי בזמן שאני מחובר: שדות "מאשר" ושם השומר עוקבים אחרי השם (הם נעולים לעריכה)
   function applyNameChange(prev, next) {
     if (prev === next) return;
     [formStudent, formVisitor].forEach(f => { f.elements.approvedBy.value = next; f.elements.approvedBy.readOnly = !!next; });
-    if (prev && state.guardName === prev) {
-      state.guardName = next;
-      ls.set('guardName', next);
-      $('#guard-name').value = next;
-      renderCounts();
-    }
+    syncGuardName();
   }
 
-  // ממלא ברירת מחדל לשם המאשר/השומר מתוך חשבון ה-Google המחובר (אם עוד לא הוזן שם ידנית)
+  // ממלא את שם המאשר ואת שם השומר מהשם של המשתמש המחובר (שהוגדר ע"י המנהל, ובהעדרו שם חשבון ה-Google)
   function applyIdentityDefaults() {
-    const name = myDisplayName();
-    if (name && !ls.get('guardName')) {
-      state.guardName = name;
-      ls.set('guardName', name);
-      $('#guard-name').value = name;
-    }
+    syncGuardName();
     initForms();
   }
 

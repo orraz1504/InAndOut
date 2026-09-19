@@ -249,7 +249,8 @@
       <section id="view-guard" class="hidden">
         <div class="card mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 p-3 sm:p-4">
           <label for="guard-name" class="text-base font-extrabold sm:text-lg">👮 שם השומר:</label>
-          <input id="guard-name" class="field min-w-0 flex-1 text-lg sm:max-w-xs" placeholder="הקלידו את שמכם" autocomplete="name">
+          <input id="guard-name" class="field min-w-0 flex-1 text-lg read-only:bg-slate-100 read-only:text-slate-600 sm:max-w-xs" placeholder="הקלידו את שמכם" autocomplete="name">
+          <p class="w-full text-xs text-slate-500">נקבע לפי השם שהוגדר לך ולא ניתן לשינוי</p>
           <p id="guard-name-warn" class="hidden w-full text-sm font-bold text-red-600">יש להזין שם לפני רישום כניסה / יציאה</p>
         </div>
 
@@ -339,7 +340,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
   <!-- מספר הגרסה מבטיח שה-HTML וה-JS תמיד מאותה גרסה (הדפדפן שומר קבצים במטמון עד 10 דקות). להעלות בכל שינוי ב-app.js / index.html -->
-  <script src="firebase-config.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="firebase-config.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
