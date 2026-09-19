@@ -28,15 +28,19 @@
 - **מנהל** (`adminEmails`) לא צריך אישור. רק הוא רואה את טבלאות האישורים ואת מסך הניהול, ורק הוא יכול למחוק.
 - **שומר** רואה את יציאות היום ואת היציאות העתידיות (לצפייה בלבד).
 - חשוב: משתמש מורשה (למשל שומר) יכול לקרוא את הנתונים כדי לעבוד, לכן ההסתרה של הטבלאות ממנו היא ברמת הממשק. הכללים מונעים גישה מכל מי שלא אושר.
+- **מי יכול לערוך רשומה** (נאכף ב-`firestore.rules`, לא רק בממשק): מנהל – הכול; יוצר הרשומה (`createdBy`) – עריכה מלאה של הרשומות שיצר, בלי לשנות את `createdBy`; שומר – רק שדות הכניסה/יציאה (סטטוס, זמנים, שם שומר) של כל רשומה. יצירה אפשרית רק על שמך (`createdBy` = האימייל שלך). רשומות ישנות בלי `createdBy` – מנהל ושומר בלבד. מחיקה – מנהל בלבד.
+- **בדיקות תקינות בכללים:** כל כתיבה נבדקת ב-`firestore.rules` – רק שדות מוכרים (`hasOnly`), שדות חובה, סוגים (מחרוזת / מספר / בוליאני), אורכי מקסימום, תאריך `YYYY-MM-DD`, שעה `HH:MM`, וערכי סטטוס ותפקיד מהרשימה המותרת בלבד. רשומה חדשה חייבת להתחיל במצב התחלתי (ממתין / טרם נכנס, בלי שומר וזמנים). `createdBy` ו-`createdAt` לא משתנים אחרי היצירה. שומר לא יכול לבטל אישור או לגעת באישור שבוטל. **אם מוסיפים שדה חדש לרשומה – חובה להוסיף אותו גם לרשימות ב-`validStudent` / `validVisitor` / `validUser`, אחרת הכתיבה תידחה.** זמנים נשמרים כמספר (מילישניות), לא כ-Timestamp של Firestore.
+- **עדכון הכללים:** אחרי כל שינוי ב-`firestore.rules` יש להדביק אותם ב-Firebase Console → Firestore → Rules → Publish. סדר הפעולות: קודם להעלות את האתר (שכותב `createdBy`), ורק אחר כך לפרסם את הכללים – אחרת יצירת רשומות מגרסה ישנה של האתר תיכשל.
 - ה-`apiKey` של Firebase Web אינו סוד – מי שמאבטח את הנתונים הם **כללי Firestore**.
 
 בלי מפתח Firebase אמיתי האפליקציה רצה במצב הדגמה (localStorage בדפדפן בלבד). כניסת מנהל בהדגמה: האימייל הראשון ב-`adminEmails` והסיסמה `demoAdminPassword` – הדמיה בלבד, לא אבטחה.
 
 ## מבנה הנתונים
-- `student_exits`: `studentName, grade, exitDate (YYYY-MM-DD), exitTime (HH:MM), approvedBy, status, actualExitAt, guardName, createdAt`
+- `student_exits`: `studentName, grade, exitDate (YYYY-MM-DD), exitTime (HH:MM), approvedBy, status, actualExitAt, guardName, createdAt, createdBy`
   סטטוסים: `ממתין ליציאה` / `יצא בפועל` / `בוטל`
-- `users` (מזהה = האימייל באותיות קטנות): `email, name, status (pending / approved / blocked), createdAt`
-- `visitor_entries`: `firstName, lastName, idNumber, purpose, escortRequired, armedAllowed, approvedBy, visitDate, status, entryAt, exitAt, guardName, exitGuardName, createdAt`
+- `users` (מזהה = האימייל באותיות קטנות): `email, name, status (pending / approved / blocked), role (staff / guard / admin), createdAt, addedBy`
+  `name` נלקח בהתחברות הראשונה משם חשבון ה-Google, והמנהל יכול לשנות אותו במסך "ניהול" (לא חובה). הוא מוצג בסרגל העליון של המשתמש ומתמלא אוטומטית כשם המאשר / השומר; ריק = שם חשבון ה-Google. רשומות שכבר נוצרו לא משתנות.
+- `visitor_entries`: `firstName, lastName, idNumber, purpose, escortRequired, armedAllowed, approvedBy, visitDate, notes, status, entryAt, exitAt, guardName, exitGuardName, createdAt, createdBy`
   סטטוסים: `טרם נכנס` / `נמצא בשטח` / `יצא`
 
 ה-`id` הוא מזהה המסמך ב-Firestore. אין צורך ביצירת אינדקסים.

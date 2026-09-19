@@ -9,6 +9,24 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <script>
+    // כל כשל בטעינה או בהפעלה מוצג על המסך (עם הסיבה) במקום מסך לבן.
+    (function () {
+      function show(msg) {
+        var el = document.getElementById('fatal');
+        if (!el) return;
+        el.textContent = 'שגיאה בטעינת האפליקציה – נסו רענון מלא של העמוד. ' + msg;
+        el.classList.remove('hidden');
+      }
+      window.addEventListener('error', function (e) {
+        if (e.target && e.target.tagName === 'SCRIPT') show('נכשלה טעינת ' + (e.target.src || ''));
+        else if (e.message) show(e.message);
+      }, true);
+      window.addEventListener('unhandledrejection', function (e) {
+        show(String((e.reason && e.reason.message) || e.reason || ''));
+      });
+    })();
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { theme: { extend: {
@@ -220,6 +238,8 @@
             <button class="btn btn-primary py-3 sm:shrink-0" type="submit">➕ הוסף ואשר</button>
           </div>
         </form>
+        <p class="text-sm text-slate-500">בכל שורה אפשר לשנות את <b>השם שבו קוראים למשתמש</b> (לא חובה). הוא מופיע בסרגל העליון של המשתמש ומתמלא אוטומטית כשם המאשר / השומר.
+          אם משאירים ריק – משתמשים בשם מחשבון ה-Google. השם נשמר ביציאה מהשדה או בלחיצה על Enter, ורשומות קיימות לא משתנות.</p>
         <div id="users-list" class="space-y-6"></div>
       </section>
 
@@ -316,7 +336,8 @@
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
-  <script src="firebase-config.js"></script>
-  <script src="app.js"></script>
+  <!-- מספר הגרסה מבטיח שה-HTML וה-JS תמיד מאותה גרסה (הדפדפן שומר קבצים במטמון עד 10 דקות). להעלות בכל שינוי ב-app.js / index.html -->
+  <script src="firebase-config.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

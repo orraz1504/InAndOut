@@ -11,7 +11,7 @@ service cloud.firestore {
       return signedIn() && (
         me() in ['or.raz1504@gmail.com'] ||
         (exists(/databases/$(database)/documents/users/$(me()))
-          && get(/databases/$(database)/documents/users/$(me())).data.role == 'admin'
+          && get(/databases/$(database)/documents/users/$(me())).data.get('role', '') == 'admin'
           && get(/databases/$(database)/documents/users/$(me())).data.status == 'approved')
       );
     }
@@ -23,20 +23,132 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(me())).data.status == 'approved';
     }
 
+    // ── בדיקות תקינות (ולידציה) ──
+    // כל כתיבה נבדקת על המסמך שייווצר בפועל (request.resource.data): רק שדות מוכרים (hasOnly), שדות חובה (hasAll),
+    // סוגים, אורכים וערכים מותרים. כך גם משתמש מורשה (או כתיבה ישירה ל-API) לא יכול להכניס נתונים משובשים.
+    // אורכי מקסימום נדיבים במכוון – הם רק מונעים זבל / מסמכים ענקיים, לא מגבילים שימוש רגיל.
+    // הערך של שדות "זמן" באפליקציה הוא מספר (Date.now() במילישניות), לא Timestamp של Firestore.
+    function isStr(v, max) { return v is string && v.size() <= max; }
+    function isText(v, max) { return v is string && v.size() > 0 && v.size() <= max; }
+    function isNumOrNull(v) { return v == null || v is number; }
+    function isDate(v) { return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$'); }             // YYYY-MM-DD
+    function isTime(v) { return v is string && v.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$'); }             // HH:MM
+    // זמן יצירה סביר: אחרי שנת 2001 ולא יותר מיום קדימה (מונע ערך ענק שיישאר תמיד בראש הרשימה הממוינת לפי createdAt)
+    function saneCreatedAt(v) { return v is number && v > 1000000000000 && v <= request.time.toMillis() + 86400000; }
+
     // ── משתמשים ──
     // כל חשבון Google יכול להתחבר ולפתוח בקשה (status: pending) על האימייל של עצמו בלבד.
-    // רק מנהל משנה סטטוס, מוסיף אימיילים מראש או מוחק.
+    // רק מנהל משנה סטטוס / תפקיד, מוסיף אימיילים מראש או מוחק. גם כתיבת מנהל נבדקת: סטטוס ותפקיד רק מהרשימה המותרת.
+    function validUser(d, userId) {
+      return d.keys().hasOnly(['email', 'name', 'status', 'role', 'createdAt', 'addedBy'])
+        && d.keys().hasAll(['email', 'status', 'createdAt'])
+        && d.email == userId
+        && isStr(d.get('name', ''), 200)
+        && d.status in ['pending', 'approved', 'blocked']
+        && d.get('role', 'staff') in ['staff', 'guard', 'admin']
+        && d.createdAt is number
+        && isStr(d.get('addedBy', ''), 200);
+    }
     match /users/{userId} {
       allow read: if isAdmin() || (signedIn() && userId == me());
       allow create: if signedIn() && userId == me()
+        && validUser(request.resource.data, userId)
         && request.resource.data.keys().hasOnly(['email', 'name', 'status', 'createdAt'])
         && request.resource.data.status == 'pending'
         && request.resource.data.email == me();
-      allow create, update, delete: if isAdmin();
+      allow create, update: if isAdmin() && validUser(request.resource.data, userId);
+      allow delete: if isAdmin();
     }
 
-    // ── נתוני המערכת: מורשים ומנהל; מחיקה – מנהל בלבד ──
-    match /student_exits/{id}   { allow read, create, update: if isAdmin() || isApproved(); allow delete: if isAdmin(); }
-    match /visitor_entries/{id} { allow read, create, update: if isAdmin() || isApproved(); allow delete: if isAdmin(); }
+    // שומר = משתמש מורשה עם role == 'guard' (משתמשים ישנים בלי role נחשבים 'staff')
+    function isGuard() {
+      return isApproved()
+        && get(/databases/$(database)/documents/users/$(me())).data.get('role', 'staff') == 'guard';
+    }
+
+    // ── נתוני המערכת ──
+    // קריאה: מורשים ומנהל. יצירה: רק על שמך (createdBy == האימייל שלך), רק במצב התחלתי (ממתין / טרם נכנס, בלי שומר וזמנים).
+    // עדכון: מנהל – הכול. יוצר הרשומה – עריכה מלאה. שומר – רק שדות הכניסה/יציאה (סטטוס, זמנים, שם שומר) של כל רשומה,
+    //        כי הוא רושם יציאות של רשומות שיצרו אחרים. שומר לא יכול לבטל אישור או לגעת באישור שבוטל.
+    // תמיד: createdBy ו-createdAt לא משתנים אחרי היצירה (גם לא ע"י מנהל).
+    // הבדיקה על היוצר היא על הערך השמור (resource.data.createdBy) ולא על הערך הנכנס – אחרת אפשר היה "לתפוס" רשומה של אחר
+    // על ידי כתיבת האימייל של עצמך ב-createdBy. רשומות ישנות בלי createdBy: מנהל ושומר בלבד.
+    // בעדכון לא נדרשים שדות שחסרים ברשומות ישנות (notes, createdBy...), לכן משתמשים ב-get(שדה, ברירת מחדל).
+    // מחיקה: מנהל בלבד.
+    function isCreator() { return isApproved() && resource.data.get('createdBy', '') == me(); }
+    function keepsOrigin() {
+      return request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.get('createdBy', '') == resource.data.get('createdBy', '');
+    }
+    function changesOnly(keys) { return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys); }
+    function canCreate() { return (isAdmin() || isApproved()) && request.resource.data.createdBy == me(); }
+
+    // ── אישורי יציאה לתלמידים ──
+    function validStudent(d) {
+      return d.keys().hasOnly(['studentName', 'grade', 'exitDate', 'exitTime', 'approvedBy', 'status',
+                               'actualExitAt', 'guardName', 'createdAt', 'createdBy'])
+        && d.keys().hasAll(['studentName', 'grade', 'exitDate', 'exitTime', 'approvedBy', 'status', 'createdAt'])
+        && isText(d.studentName, 100) && isText(d.grade, 20) && isText(d.approvedBy, 100)
+        && isDate(d.exitDate) && isTime(d.exitTime)
+        && d.status in ['ממתין ליציאה', 'יצא בפועל', 'בוטל']
+        && isNumOrNull(d.get('actualExitAt', null))
+        && isStr(d.get('guardName', ''), 100)
+        && d.createdAt is number
+        && isStr(d.get('createdBy', ''), 200);
+    }
+    function newStudent(d) {
+      return validStudent(d)
+        && d.keys().hasAll(['actualExitAt', 'guardName', 'createdBy'])
+        && d.status == 'ממתין ליציאה' && d.actualExitAt == null && d.guardName == ''
+        && saneCreatedAt(d.createdAt);
+    }
+    function guardMayTouchStudent() {
+      return changesOnly(['status', 'actualExitAt', 'guardName'])
+        && resource.data.status in ['ממתין ליציאה', 'יצא בפועל']
+        && request.resource.data.status in ['ממתין ליציאה', 'יצא בפועל'];
+    }
+
+    match /student_exits/{id} {
+      allow read: if isAdmin() || isApproved();
+      allow create: if canCreate() && newStudent(request.resource.data);
+      allow update: if validStudent(request.resource.data) && keepsOrigin()
+        && (isAdmin() || isCreator() || (isGuard() && guardMayTouchStudent()));
+      allow delete: if isAdmin();
+    }
+
+    // ── אישורי כניסה למבקרים ──
+    function validVisitor(d) {
+      return d.keys().hasOnly(['firstName', 'lastName', 'idNumber', 'purpose', 'visitDate', 'approvedBy', 'notes',
+                               'escortRequired', 'armedAllowed', 'status', 'entryAt', 'exitAt', 'guardName',
+                               'exitGuardName', 'createdAt', 'createdBy'])
+        && d.keys().hasAll(['firstName', 'lastName', 'idNumber', 'purpose', 'visitDate', 'approvedBy',
+                            'escortRequired', 'armedAllowed', 'status', 'createdAt'])
+        && isText(d.firstName, 50) && isText(d.lastName, 50) && isText(d.idNumber, 30)
+        && isText(d.purpose, 200) && isText(d.approvedBy, 100)
+        && isDate(d.visitDate)
+        && d.escortRequired is bool && d.armedAllowed is bool
+        && isStr(d.get('notes', ''), 1000)
+        && d.status in ['טרם נכנס', 'נמצא בשטח', 'יצא']
+        && isNumOrNull(d.get('entryAt', null)) && isNumOrNull(d.get('exitAt', null))
+        && isStr(d.get('guardName', ''), 100) && isStr(d.get('exitGuardName', ''), 100)
+        && d.createdAt is number
+        && isStr(d.get('createdBy', ''), 200);
+    }
+    function newVisitor(d) {
+      return validVisitor(d)
+        && d.keys().hasAll(['notes', 'entryAt', 'exitAt', 'guardName', 'exitGuardName', 'createdBy'])
+        && d.status == 'טרם נכנס' && d.entryAt == null && d.exitAt == null
+        && d.guardName == '' && d.exitGuardName == ''
+        && saneCreatedAt(d.createdAt);
+    }
+
+    match /visitor_entries/{id} {
+      allow read: if isAdmin() || isApproved();
+      allow create: if canCreate() && newVisitor(request.resource.data);
+      allow update: if validVisitor(request.resource.data) && keepsOrigin()
+        && (isAdmin() || isCreator()
+            || (isGuard() && changesOnly(['status', 'entryAt', 'exitAt', 'guardName', 'exitGuardName'])));
+      allow delete: if isAdmin();
+    }
   }
 }

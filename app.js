@@ -136,7 +136,7 @@
     view: 'staff', staffTab: 'students', guardTab: 'students', guardRange: 'today',
     students: [], visitors: [], users: [], query: '',
     guardName: ls.get('guardName'),
-    user: null, myRole: null,
+    user: null, myRole: null, myName: '',   // myName: השם שהמנהל קבע לי (users/<email>.name) – גובר על שם חשבון ה-Google
     // סינון ומיון של רשימת האישורים: טקסט חופשי, סטטוס, תאריך מדויק (YYYY-MM-DD) או חודש (YYYY-MM)
     recStudents: { query: '', status: '', date: '', month: '', sort: 'date-desc' },
     recVisitors: { query: '', status: '', date: '', month: '', sort: 'date-desc' },
@@ -145,7 +145,9 @@
   const isAdmin = () => !!state.user && (
     adminEmails().includes(String(state.user.email || '').toLowerCase()) || state.myRole === 'admin');
   const myRole = () => isAdmin() ? 'admin' : state.myRole;
-  const myDisplayName = () => (state.user && (state.user.displayName || state.user.email)) || '';
+  // מזהה היוצר על כל רשומה חדשה (createdBy). חייב להיות זהה ל-request.auth.token.email באותיות קטנות – כללי Firestore אוכפים זאת
+  const myEmail = () => String((state.user && state.user.email) || '').trim().toLowerCase();
+  const myDisplayName = () => (state.user && (state.myName || state.user.displayName || state.user.email)) || '';
   const ROLE_LABEL = { staff: '📝 צוות', guard: '🛡️ שומר', admin: '⭐ מנהל' };
   const ROLE_OPTIONS = ['staff', 'guard', 'admin'];
   function allowedViews() {
@@ -644,16 +646,22 @@
     badge.textContent = pending.length;
     badge.classList.toggle('hidden', !pending.length);
 
+    // לא מרעננים את הרשימה בזמן שמקלידים שם – אחרת הטקסט נמחק (רענון קורא כל 30 שניות וגם בכל שינוי בנתונים)
+    if (document.activeElement && document.activeElement.matches('[data-name-input]')) return;
+
     const btn = (act, id, label, cls) => `<button class="btn ${cls} btn-sm" data-action="${act}" data-id="${esc(id)}">${label}</button>`;
     const roleField = (u, editable) => editable
       ? `<select class="field !w-auto !py-1.5 !text-sm" data-role-input="${esc(u.id)}" aria-label="תפקיד">
           ${ROLE_OPTIONS.map(r => `<option value="${r}" ${(u.role || 'staff') === r ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}
         </select>`
       : `<span class="badge bg-slate-100 text-slate-600">${ROLE_LABEL[u.role] || ROLE_LABEL.staff}</span>`;
+    // השם שבו קוראים למשתמש (נשמר ב-users/<email>.name). ריק = שם חשבון ה-Google. נשמר ביציאה מהשדה / Enter.
+    const nameField = u => `<input class="field !w-40 !py-1.5 !text-sm" data-name-input="${esc(u.id)}" value="${esc(u.name || '')}"
+        maxlength="100" placeholder="שם לתצוגה" aria-label="שם לתצוגה" autocomplete="off">`;
     const row = (u, actions, editableRole) => `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
         <div class="min-w-0"><bdi class="break-all font-bold">${esc(u.email)}</bdi>
-          <div class="text-sm text-slate-500">${u.name ? esc(u.name) + ' · ' : ''}נרשם/ה ${fmtTs(u.createdAt)}</div></div>
-        <div class="flex flex-wrap items-center gap-2">${roleField(u, editableRole)}${actions}</div></div>`;
+          <div class="text-sm text-slate-500">נרשם/ה ${fmtTs(u.createdAt)}</div></div>
+        <div class="flex flex-wrap items-center gap-2">${nameField(u)}${roleField(u, editableRole)}${actions}</div></div>`;
     const section = (title, cls, items, actionsFor, editableRole) => items.length
       ? `<section><h3 class="mb-2 text-lg font-extrabold ${cls}">${title} (${items.length})</h3>
           <div class="space-y-2">${items.map(u => row(u, actionsFor(u), editableRole)).join('')}</div></section>` : '';
@@ -896,9 +904,17 @@
   });
 
   document.addEventListener('change', e => {
-    const el = e.target.closest('[data-role-input]');
-    if (!el) return;
-    userAction(el.dataset.roleInput, () => store.patch(COL.users, el.dataset.roleInput, { role: el.value }), 'התפקיד עודכן');
+    const roleEl = e.target.closest('[data-role-input]');
+    if (roleEl) {
+      userAction(roleEl.dataset.roleInput, () => store.patch(COL.users, roleEl.dataset.roleInput, { role: roleEl.value }), 'התפקיד עודכן');
+      return;
+    }
+    const nameEl = e.target.closest('[data-name-input]');
+    if (nameEl) {
+      const id = nameEl.dataset.nameInput, name = nameEl.value.trim();
+      if (name === ((state.users.find(u => u.id === id) || {}).name || '')) return;   // לא השתנה
+      userAction(id, () => store.patch(COL.users, id, { name }), name ? 'השם עודכן' : 'השם נוקה – יוצג שם חשבון ה-Google');
+    }
   });
 
   $('#guard-name').value = state.guardName;
@@ -932,7 +948,7 @@
     const d = clean(formStudent, ['studentName', 'grade', 'exitDate', 'exitTime', 'approvedBy']);
     if (Object.values(d).some(v => !v)) return toast('יש למלא את כל השדות', 'err');
     ls.set('staffName', d.approvedBy);
-    const doc = { ...d, status: S.PENDING, actualExitAt: null, guardName: '', createdAt: Date.now() };
+    const doc = { ...d, status: S.PENDING, actualExitAt: null, guardName: '', createdAt: Date.now(), createdBy: myEmail() };
     formStudent.reset();
     initForms();
     run(() => store.add(COL.students, doc).then(() => true)).then(ok => ok && toast(`נוסף אישור יציאה: ${doc.studentName}`));
@@ -951,7 +967,7 @@
       escortRequired: radio('escortRequired') === 'yes',
       armedAllowed: radio('armedAllowed') === 'yes',
       status: V.PENDING, entryAt: null, exitAt: null, guardName: '', exitGuardName: '',
-      createdAt: Date.now(),
+      createdAt: Date.now(), createdBy: myEmail(),
     };
     formVisitor.reset();
     initForms();
@@ -1020,7 +1036,10 @@
       if (state.user !== user) return;                      // התנתק בינתיים
       unsubAccess = store.subscribeDoc(COL.users, id,
         doc => {
+          const prevName = myDisplayName();
           state.myRole = (doc && doc.role) || null;
+          state.myName = ((doc && doc.name) || '').trim();
+          applyNameChange(prevName, myDisplayName());
           renderChrome();
           setAccess(doc && Object.values(U).includes(doc.status) ? doc.status : U.PENDING);
         },
@@ -1073,9 +1092,21 @@
     state.students = [];
     state.visitors = [];
     state.users = [];
-    if (!state.user) state.myRole = null;
+    if (!state.user) { state.myRole = null; state.myName = ''; }
     $('#app').classList.add('hidden');
     renderAll();
+  }
+
+  // המנהל שינה את השם שלי בזמן שאני מחובר: מעדכנים את השם בשדות "מאשר" ובשם השומר – רק אם עוד לא שיניתי אותם ידנית
+  function applyNameChange(prev, next) {
+    if (!prev || prev === next) return;
+    [formStudent, formVisitor].forEach(f => { if (f.elements.approvedBy.value === prev) f.elements.approvedBy.value = next; });
+    if (state.guardName === prev) {
+      state.guardName = next;
+      ls.set('guardName', next);
+      $('#guard-name').value = next;
+      renderCounts();
+    }
   }
 
   // ממלא ברירת מחדל לשם המאשר/השומר מתוך חשבון ה-Google המחובר (אם עוד לא הוזן שם ידנית)
