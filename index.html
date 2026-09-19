@@ -3,14 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
-  <title>אישורי כניסה ויציאה</title>
+  <meta name="theme-color" content="#31285c">
+  <title>אורט שפירא · אישורי כניסה ויציאה</title>
+  <link rel="icon" href="logo.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
-    tailwind.config = { theme: { extend: { fontFamily: { sans: ['Heebo', 'system-ui', 'sans-serif'] } } } };
+    tailwind.config = { theme: { extend: {
+      fontFamily: { sans: ['Heebo', 'system-ui', 'sans-serif'] },
+      colors: {
+        brand:  { 50: '#f2f1f9', 100: '#e2dff1', 200: '#c5bfe3', 300: '#9e94d1', 400: '#7163bb',
+                  500: '#52449c', 600: '#403479', 700: '#31285c', 800: '#241d44', 900: '#18142e' },
+        accent: { 50: '#f4f9fb', 100: '#e4f2f6', 200: '#c6e3ec', 300: '#a0d1df', 400: '#7abfd2',
+                  500: '#54acc5', 600: '#3b96af', 700: '#30798d', 800: '#245b6b', 900: '#1a414c' },
+      },
+    } } };
   </script>
   <style type="text/tailwindcss">
     html { -webkit-tap-highlight-color: transparent; }
@@ -20,26 +29,26 @@
       /* ניווט ראשי: תפריט תחתון במובייל, לשוניות בדסקטופ */
       .navtab     { @apply flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 text-xs font-bold text-slate-500 transition sm:flex-none sm:flex-row sm:gap-2 sm:bg-slate-100 sm:px-6 sm:py-3 sm:text-base sm:hover:bg-slate-200; }
       .navtab .ico{ @apply text-2xl leading-none sm:text-xl; }
-      .navtab[aria-selected="true"] { @apply bg-indigo-50 text-indigo-700 sm:bg-indigo-600 sm:text-white sm:hover:bg-indigo-600; }
+      .navtab[aria-selected="true"] { @apply bg-brand-50 text-brand-700 sm:bg-brand-600 sm:text-white sm:hover:bg-brand-600; }
 
       .tab        { @apply flex-1 rounded-xl bg-slate-100 px-3 py-3 text-base font-bold text-slate-600 transition hover:bg-slate-200 sm:flex-none sm:px-6; }
-      .tab[aria-selected="true"] { @apply bg-indigo-600 text-white shadow hover:bg-indigo-600; }
+      .tab[aria-selected="true"] { @apply bg-brand-600 text-white shadow hover:bg-brand-600; }
       .tab-lg     { @apply py-3.5 text-lg sm:text-xl; }
       .count      { @apply ms-1 rounded-full bg-slate-300/60 px-2 text-sm; }
       .tab[aria-selected="true"] .count,
       .chip[aria-pressed="true"] .count { @apply bg-white/25; }
       .chip       { @apply rounded-full bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-200; }
-      .chip[aria-pressed="true"] { @apply bg-indigo-600 text-white hover:bg-indigo-600; }
+      .chip[aria-pressed="true"] { @apply bg-brand-600 text-white hover:bg-brand-600; }
       .chip-lg    { @apply flex-1 px-5 py-3 text-base font-bold sm:flex-none; }
 
       .card       { @apply rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6; }
       .label      { @apply mb-1 block text-sm font-semibold text-slate-700; }
-      .field      { @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200; }
+      .field      { @apply w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-base focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-200; }
 
-      .seg        { @apply block cursor-pointer rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-center font-bold text-slate-600 peer-checked:border-indigo-600 peer-checked:bg-indigo-50 peer-checked:text-indigo-800 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-300; }
+      .seg        { @apply block cursor-pointer rounded-xl border-2 border-slate-300 bg-white px-4 py-3 text-center font-bold text-slate-600 peer-checked:border-brand-600 peer-checked:bg-brand-50 peer-checked:text-brand-800 peer-focus-visible:ring-2 peer-focus-visible:ring-brand-300; }
 
       .btn        { @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 font-bold transition active:scale-95 disabled:opacity-50; }
-      .btn-primary{ @apply bg-indigo-600 text-white hover:bg-indigo-700; }
+      .btn-primary{ @apply bg-brand-600 text-white hover:bg-brand-700; }
       .btn-green  { @apply bg-emerald-600 text-white hover:bg-emerald-700; }
       .btn-amber  { @apply bg-amber-500 text-white hover:bg-amber-600; }
       .btn-ghost  { @apply bg-slate-100 text-slate-700 hover:bg-slate-200; }
@@ -66,13 +75,18 @@
     </div>
 
     <!-- ───────── סרגל עליון ───────── -->
-    <header class="sticky top-0 z-30 bg-white shadow-sm">
-      <div class="mx-auto flex h-14 max-w-6xl items-center gap-2 px-4">
-        <h1 class="truncate text-lg font-extrabold sm:text-xl">
-          🏫 <span class="sm:hidden">כניסה ויציאה</span><span class="hidden sm:inline">אישורי כניסה ויציאה</span>
-        </h1>
+    <header class="sticky top-0 z-30 border-b-4 border-accent-500 bg-white shadow-sm">
+      <div class="mx-auto flex h-16 max-w-6xl items-center gap-3 px-4">
+        <img src="logo.jpg" alt="לוגו אורט שפירא" class="h-11 w-auto shrink-0 rounded">
+        <div class="min-w-0 leading-tight">
+          <h1 class="truncate text-base font-extrabold text-brand-800 sm:text-lg">אורט שפירא</h1>
+          <p class="truncate text-xs font-semibold text-slate-500 sm:text-sm">
+            <span class="sm:hidden">כניסה ויציאה</span><span class="hidden sm:inline">אישורי כניסה ויציאה</span>
+          </p>
+        </div>
         <div class="ms-auto flex items-center gap-2">
-          <span id="role-badge" class="badge hidden bg-indigo-100 text-indigo-800"></span>
+          <span id="role-badge" class="badge hidden bg-brand-100 text-brand-800"></span>
+          <span id="user-name" class="hidden max-w-[8rem] truncate text-sm font-semibold text-slate-600 sm:max-w-[14rem]"></span>
           <span id="conn" class="badge bg-slate-200 text-slate-600"></span>
           <button id="btn-admin-login" class="btn btn-ghost btn-sm" data-action="open-login" aria-label="כניסת מנהל">🔑<span class="hidden sm:inline">כניסת מנהל</span></button>
           <button id="logout" class="btn btn-ghost btn-sm hidden" data-action="logout" aria-label="התנתקות">🚪<span class="hidden sm:inline">התנתקות</span></button>
@@ -83,9 +97,9 @@
     <!-- ניווט ראשי: קבוע בתחתית המסך במובייל (נוח לאגודל). כל לשונית מוצגת רק למי שמורשה אליה -->
     <nav id="nav" class="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white pb-[env(safe-area-inset-bottom)] sm:static sm:border-0 sm:bg-transparent sm:pb-0" role="tablist" aria-label="בחירת מסך">
       <div class="mx-auto flex max-w-6xl gap-2 p-2 sm:px-4 sm:pb-0 sm:pt-4">
-        <button class="navtab" role="tab" data-action="view" data-view="staff"><span class="ico">📝</span>מסך צוות</button>
-        <button class="navtab" role="tab" data-action="view" data-view="guard"><span class="ico">🛡️</span>עמדת שומר</button>
-        <button class="navtab" role="tab" data-action="view" data-view="records"><span class="ico">📋</span>אישורים</button>
+        <button id="nav-staff" class="navtab" role="tab" data-action="view" data-view="staff"><span class="ico">📝</span>מסך צוות</button>
+        <button id="nav-guard" class="navtab" role="tab" data-action="view" data-view="guard"><span class="ico">🛡️</span>עמדת שומר</button>
+        <button id="nav-records" class="navtab" role="tab" data-action="view" data-view="records"><span class="ico">📋</span>אישורים</button>
         <button id="nav-admin" class="navtab" role="tab" data-action="view" data-view="admin"><span class="ico">👥</span>
           <span>ניהול <span id="cnt-admin-pending" class="count hidden bg-red-600 text-white">0</span></span></button>
       </div>
@@ -195,13 +209,15 @@
           <h2 class="mb-1 text-lg font-extrabold">הרשאת גישה למשתמש</h2>
           <p class="mb-4 text-sm text-slate-500">
             כל חשבון Google יכול להתחבר, אבל רואה נתונים רק אחרי שהמנהל מאשר אותו ומגדיר תפקיד.
-            <b>צוות</b> – מזין אישורים בלבד. <b>שומר</b> – עמדת שומר בלבד. אפשר גם לאשר אימייל מראש.
+            <b>צוות</b> – מסך צוות בלבד. <b>שומר</b> – עמדת שומר בלבד. <b>מנהל</b> – גישה מלאה, כולל מסך הניהול הזה.
+            אפשר גם לאשר אימייל מראש, ולשנות תפקיד בכל עת ברשימה שלמטה.
           </p>
           <div class="flex flex-col gap-2 sm:flex-row">
             <input name="email" type="email" dir="ltr" class="field sm:flex-1" placeholder="name@gmail.com" aria-label="אימייל" required>
             <select name="role" class="field sm:w-auto" aria-label="תפקיד" required>
               <option value="staff">📝 צוות</option>
               <option value="guard">🛡️ שומר</option>
+              <option value="admin">⭐ מנהל</option>
             </select>
             <button class="btn btn-primary py-3 sm:shrink-0" type="submit">➕ הוסף ואשר</button>
           </div>
@@ -283,6 +299,18 @@
       <p class="text-sm text-slate-500">מחובר/ת כ-<bdi id="gate-email" class="font-bold"></bdi></p>
       <button class="btn btn-ghost w-full" data-action="logout">התנתקות / החלפת חשבון</button>
     </div>
+  </div>
+
+  <!-- עריכת רשומה (מנהל בלבד): שדות נבנים דינמית לפי סוג הרשומה -->
+  <div id="edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/40 p-4">
+    <form id="edit-form" class="card w-full max-w-md space-y-4 shadow-xl">
+      <div class="flex items-center justify-between gap-2">
+        <h2 id="edit-title" class="text-xl font-extrabold">עריכת רשומה</h2>
+        <button type="button" class="btn btn-ghost btn-sm" data-action="close-edit" aria-label="סגירה">✕</button>
+      </div>
+      <div id="edit-fields" class="space-y-3"></div>
+      <button class="btn btn-primary w-full py-3 text-lg" type="submit">💾 שמירת שינויים</button>
+    </form>
   </div>
 
   <div id="toasts" class="pointer-events-none fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4 sm:bottom-4"></div>

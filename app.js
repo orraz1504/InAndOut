@@ -136,9 +136,22 @@
     view: 'staff', staffTab: 'students', guardTab: 'students', guardRange: 'today', staffFilter: 'today',
     students: [], visitors: [], users: [], query: '',
     guardName: ls.get('guardName'),
-    user: null,
+    user: null, myRole: null,
   };
-  const isAdmin = () => !!state.user && adminEmails().includes(String(state.user.email || '').toLowerCase());
+  // אדמין = ברשימת adminEmails הקבועה (bootstrap), או שהמנהל הנוכחי הגדיר לו role: 'admin' במסך ניהול
+  const isAdmin = () => !!state.user && (
+    adminEmails().includes(String(state.user.email || '').toLowerCase()) || state.myRole === 'admin');
+  const myRole = () => isAdmin() ? 'admin' : state.myRole;
+  const myDisplayName = () => (state.user && (state.user.displayName || state.user.email)) || '';
+  const ROLE_LABEL = { staff: '📝 צוות', guard: '🛡️ שומר', admin: '⭐ מנהל' };
+  const ROLE_OPTIONS = ['staff', 'guard', 'admin'];
+  function allowedViews() {
+    const role = myRole();
+    if (!state.user) return [];
+    if (role === 'admin') return ['staff', 'guard', 'records', 'admin'];
+    if (role === 'guard') return ['guard'];
+    return ['staff'];   // 'staff', וגם ברירת מחדל למשתמשים ישנים בלי role
+  }
   let store;
   let unsubs = [];
   let unsubAccess = null;                 // האזנה למסמך users/<email> של המשתמש המחובר
@@ -216,6 +229,7 @@
       ? `<div class="mt-1 text-sm text-slate-500">ב-${fmtTs(s.actualExitAt)} · שומר: ${esc(s.guardName)}</div>` : '';
     const cancelBtn = (s, cls = '') => s.status === S.PENDING
       ? `<button class="btn btn-danger btn-sm ${cls}" data-action="student-cancel" data-id="${esc(s.id)}">ביטול אישור</button>` : '';
+    const editBtn = (s, cls = '') => `<button class="btn btn-ghost btn-sm ${cls}" data-action="student-edit" data-id="${esc(s.id)}">✏️ עריכה</button>`;
     box.innerHTML = listView(
       ['תלמיד/ה', 'כיתה', 'יציאה מאושרת', 'מאשר/ת', 'סטטוס', ''],
       list.map(s => `<tr>
@@ -224,11 +238,11 @@
         ${td(`${fmtDate(s.exitDate)} · ${esc(s.exitTime)}`)}
         ${td(esc(s.approvedBy))}
         ${td(pill(s.status, tone[s.status] || '') + detail(s))}
-        ${td(cancelBtn(s))}</tr>`),
+        ${td(`<div class="flex flex-wrap gap-2">${editBtn(s)}${cancelBtn(s)}</div>`)}</tr>`),
       list.map(s => miniCard(
         `<div class="text-base font-bold">${esc(s.studentName)}</div>${pill(s.status, tone[s.status] || '')}`,
         `כיתה ${esc(s.grade)} · ${fmtDate(s.exitDate)} ${esc(s.exitTime)} · אישר/ה: ${esc(s.approvedBy)}`,
-        detail(s), cancelBtn(s, 'w-full py-3'))),
+        detail(s), `<div class="flex gap-2">${editBtn(s, 'flex-1 py-3')}${cancelBtn(s, 'flex-1 py-3')}</div>`)),
       all ? 'אין אישורי יציאה' : 'אין אישורי יציאה להיום');
   }
 
@@ -246,6 +260,7 @@
     const armed = v => v.armedAllowed ? pill('רשאי נשק', 'bg-emerald-100 text-emerald-800') : pill('אסור נשק', 'bg-red-100 text-red-700');
     const deleteBtn = (v, cls = '') => v.status === V.PENDING
       ? `<button class="btn btn-danger btn-sm ${cls}" data-action="visitor-delete" data-id="${esc(v.id)}">מחיקה</button>` : '';
+    const editBtn = (v, cls = '') => `<button class="btn btn-ghost btn-sm ${cls}" data-action="visitor-edit" data-id="${esc(v.id)}">✏️ עריכה</button>`;
     box.innerHTML = listView(
       ['מבקר/ת', 'ת"ז', 'מטרה', 'ליווי', 'נשק', 'מאשר/ת', 'תאריך', 'סטטוס', ''],
       list.map(v => `<tr>
@@ -257,14 +272,79 @@
         ${td(esc(v.approvedBy))}
         ${td(fmtDate(v.visitDate))}
         ${td(pill(v.status, tone[v.status] || '') + detail(v))}
-        ${td(deleteBtn(v))}</tr>`),
+        ${td(`<div class="flex flex-wrap gap-2">${editBtn(v)}${deleteBtn(v)}</div>`)}</tr>`),
       list.map(v => miniCard(
         `<div class="text-base font-bold">${esc(v.firstName)} ${esc(v.lastName)}</div>${pill(v.status, tone[v.status] || '')}`,
         `ת"ז ${esc(v.idNumber)} · ${esc(v.purpose)}<br>${fmtDate(v.visitDate)} · אישר/ה: ${esc(v.approvedBy)}`,
         `<div class="mt-2 flex flex-wrap gap-2">${escort(v)}${armed(v)}</div>${detail(v)}`,
-        deleteBtn(v, 'w-full py-3'))),
+        `<div class="flex gap-2">${editBtn(v, 'flex-1 py-3')}${deleteBtn(v, 'flex-1 py-3')}</div>`)),
       all ? 'אין אישורי כניסה' : 'אין אישורי כניסה להיום');
   }
+
+  // ───────── עריכת רשומה (מנהל בלבד) ─────────
+  const EDIT_FIELDS = {
+    student: [
+      ['studentName', 'שם התלמיד/ה', 'text'],
+      ['grade', 'כיתה', 'text'],
+      ['exitDate', 'תאריך יציאה', 'date'],
+      ['exitTime', 'שעת יציאה', 'time'],
+      ['approvedBy', 'שם הגורם המאשר', 'text'],
+    ],
+    visitor: [
+      ['firstName', 'שם פרטי', 'text'],
+      ['lastName', 'שם משפחה', 'text'],
+      ['idNumber', 'ת"ז / דרכון', 'text'],
+      ['purpose', 'מטרת הכניסה', 'text'],
+      ['visitDate', 'תאריך הביקור', 'date'],
+      ['approvedBy', 'שם המאשר/ת', 'text'],
+      ['escortRequired', 'נדרש ליווי?', 'bool'],
+      ['armedAllowed', 'רשאי להיכנס עם נשק?', 'bool'],
+    ],
+  };
+  let editCtx = null;   // { kind: 'student'|'visitor', id }
+
+  function editFieldHtml([name, label, type], value) {
+    if (type === 'bool') return `<div><label class="label">${label}</label>
+      <select class="field" name="${name}">
+        <option value="yes" ${value ? 'selected' : ''}>כן</option>
+        <option value="no" ${!value ? 'selected' : ''}>לא</option>
+      </select></div>`;
+    return `<div><label class="label">${label}</label>
+      <input class="field" name="${name}" type="${type}" ${type !== 'text' ? 'dir="ltr"' : ''} value="${esc(value ?? '')}" required></div>`;
+  }
+
+  function openEdit(kind, record) {
+    editCtx = { kind, id: record.id };
+    $('#edit-title').textContent = kind === 'student' ? 'עריכת אישור יציאה' : 'עריכת אישור כניסה';
+    $('#edit-fields').innerHTML = EDIT_FIELDS[kind].map(f => editFieldHtml(f, record[f[0]])).join('');
+    $('#edit-modal').classList.remove('hidden');
+    $('#edit-modal').classList.add('flex');
+  }
+
+  function closeEdit() {
+    editCtx = null;
+    $('#edit-modal').classList.add('hidden');
+    $('#edit-modal').classList.remove('flex');
+  }
+
+  $('#edit-form').addEventListener('submit', e => {
+    e.preventDefault();
+    if (!editCtx) return;
+    const { kind, id } = editCtx;
+    const form = e.target;
+    const patch = {};
+    for (const [name, , type] of EDIT_FIELDS[kind]) {
+      patch[name] = type === 'bool' ? form.elements[name].value === 'yes' : form.elements[name].value.trim();
+    }
+    if (Object.values(patch).some(v => v === '')) return toast('יש למלא את כל השדות', 'err');
+    const col = kind === 'student' ? COL.students : COL.visitors;
+    once('edit:' + id, async () => {
+      if (await run(() => store.patch(col, id, patch).then(() => true))) {
+        toast('הרשומה עודכנה');
+        closeEdit();
+      }
+    });
+  });
 
   // ───────── עמדת שומר ─────────
   function studentCard(s, now) {
@@ -302,11 +382,11 @@
     $('#guard-students-future').innerHTML = future.length
       ? `<p class="text-sm text-slate-500">לצפייה בלבד – רישום יציאה אפשרי רק ביום שאושר.</p>` +
         Object.entries(byDate).map(([ds, items]) => `<section>
-          <h3 class="mb-2 text-lg font-extrabold text-indigo-700">${dayLabel(ds)} <span class="text-base font-semibold text-slate-500">(${items.length})</span></h3>
+          <h3 class="mb-2 text-lg font-extrabold text-brand-700">${dayLabel(ds)} <span class="text-base font-semibold text-slate-500">(${items.length})</span></h3>
           <div class="grid gap-2 lg:grid-cols-2">${items.map(s => `<div class="flex items-center justify-between gap-3 rounded-xl bg-white p-3 ring-1 ring-slate-200">
             <div class="min-w-0"><div class="break-words text-lg font-bold">${esc(s.studentName)}</div>
               <div class="text-sm text-slate-600">כיתה ${esc(s.grade)} · אישר/ה: ${esc(s.approvedBy)}</div></div>
-            <div dir="ltr" class="shrink-0 text-xl font-extrabold tabular-nums text-indigo-700">${esc(s.exitTime)}</div>
+            <div dir="ltr" class="shrink-0 text-xl font-extrabold tabular-nums text-brand-700">${esc(s.exitTime)}</div>
           </div>`).join('')}</div></section>`).join('')
       : empty('אין יציאות עתידיות');
     return future.length;
@@ -338,7 +418,7 @@
     const escort = v.escortRequired
       ? pill('✖ נדרש ליווי', 'badge-lg bg-red-600 text-white')
       : pill('✔ ללא ליווי', 'badge-lg bg-emerald-600 text-white');
-    const border = { [V.PENDING]: 'border-indigo-400', [V.INSIDE]: 'border-emerald-500', [V.LEFT]: 'border-slate-300' }[v.status];
+    const border = { [V.PENDING]: 'border-brand-400', [V.INSIDE]: 'border-emerald-500', [V.LEFT]: 'border-slate-300' }[v.status];
     let info = '', action = '';
     if (v.status === V.PENDING) {
       if (v.visitDate !== today) info = pill(`📅 מאושר לתאריך ${fmtDate(v.visitDate)}`, 'bg-amber-100 text-amber-800');
@@ -382,7 +462,7 @@
           <div class="grid gap-4 lg:grid-cols-2">${items.map(visitorCard).join('')}</div></div>` : '';
     $('#guard-visitors').innerHTML =
       section('🟢 נמצאים בשטח', 'text-emerald-700', inside) +
-      section('🕓 ממתינים לכניסה', 'text-indigo-700', pending) ||
+      section('🕓 ממתינים לכניסה', 'text-brand-700', pending) ||
       empty(searching ? 'לא נמצאו מבקרים התואמים לחיפוש' : 'אין מבקרים מוזמנים להיום');
     $('#guard-visitors-left-count').textContent = left.length;
     $('#guard-visitors-left').innerHTML = left.map(visitorCard).join('')
@@ -391,10 +471,16 @@
 
   // ───────── רינדור כללי ─────────
   function syncTabs() {
-    const view = state.view === 'admin' && !isAdmin() ? 'staff' : state.view;   // בלי לדרוס את state (המנהל עוד עלול להתחבר)
+    const allowed = allowedViews();
+    const view = allowed.includes(state.view) ? state.view : (allowed[0] || state.view);   // בלי לדרוס את state (המנהל עוד עלול להתחבר)
+    $('#nav-staff').classList.toggle('hidden', !allowed.includes('staff'));
+    $('#nav-guard').classList.toggle('hidden', !allowed.includes('guard'));
+    $('#nav-records').classList.toggle('hidden', !allowed.includes('records'));
+    $('#nav-admin').classList.toggle('hidden', !allowed.includes('admin'));
     $$('[data-action="view"]').forEach(b => b.setAttribute('aria-selected', b.dataset.view === view));
     $('#view-staff').classList.toggle('hidden', view !== 'staff');
     $('#view-guard').classList.toggle('hidden', view !== 'guard');
+    $('#view-records').classList.toggle('hidden', view !== 'records');
     $('#view-admin').classList.toggle('hidden', view !== 'admin');
     $$('[data-action="staff-tab"]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === state.staffTab));
     $('#staff-students').classList.toggle('hidden', state.staffTab !== 'students');
@@ -432,20 +518,25 @@
     badge.classList.toggle('hidden', !pending.length);
 
     const btn = (act, id, label, cls) => `<button class="btn ${cls} btn-sm" data-action="${act}" data-id="${esc(id)}">${label}</button>`;
-    const row = (u, actions) => `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
+    const roleField = (u, editable) => editable
+      ? `<select class="field !w-auto !py-1.5 !text-sm" data-role-input="${esc(u.id)}" aria-label="תפקיד">
+          ${ROLE_OPTIONS.map(r => `<option value="${r}" ${(u.role || 'staff') === r ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}
+        </select>`
+      : `<span class="badge bg-slate-100 text-slate-600">${ROLE_LABEL[u.role] || ROLE_LABEL.staff}</span>`;
+    const row = (u, actions, editableRole) => `<div class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white p-3">
         <div class="min-w-0"><bdi class="break-all font-bold">${esc(u.email)}</bdi>
           <div class="text-sm text-slate-500">${u.name ? esc(u.name) + ' · ' : ''}נרשם/ה ${fmtTs(u.createdAt)}</div></div>
-        <div class="flex gap-2">${actions}</div></div>`;
-    const section = (title, cls, items, actionsFor) => items.length
+        <div class="flex flex-wrap items-center gap-2">${roleField(u, editableRole)}${actions}</div></div>`;
+    const section = (title, cls, items, actionsFor, editableRole) => items.length
       ? `<section><h3 class="mb-2 text-lg font-extrabold ${cls}">${title} (${items.length})</h3>
-          <div class="space-y-2">${items.map(u => row(u, actionsFor(u))).join('')}</div></section>` : '';
+          <div class="space-y-2">${items.map(u => row(u, actionsFor(u), editableRole)).join('')}</div></section>` : '';
     box.innerHTML =
       section('⏳ ממתינים לאישור', 'text-amber-700', pending,
-        u => btn('user-approve', u.id, '✔ אשר', 'btn-green') + btn('user-block', u.id, 'חסום', 'btn-danger')) +
+        u => btn('user-approve', u.id, '✔ אשר', 'btn-green') + btn('user-block', u.id, 'חסום', 'btn-danger'), true) +
       section('✅ מורשים', 'text-emerald-700', approved,
-        u => btn('user-block', u.id, 'חסום', 'btn-danger') + btn('user-remove', u.id, 'הסר', 'btn-ghost')) +
+        u => btn('user-block', u.id, 'חסום', 'btn-danger') + btn('user-remove', u.id, 'הסר', 'btn-ghost'), true) +
       section('🚫 חסומים', 'text-red-700', blocked,
-        u => btn('user-approve', u.id, 'אשר', 'btn-green') + btn('user-remove', u.id, 'הסר', 'btn-ghost')) ||
+        u => btn('user-approve', u.id, 'אשר', 'btn-green') + btn('user-remove', u.id, 'הסר', 'btn-ghost'), false) ||
       empty('עדיין אין משתמשים. הוסיפו אימייל, או המתינו שמישהו יתחבר עם Google.');
   }
 
@@ -555,13 +646,14 @@
     e.preventDefault();
     const form = e.target;
     const email = emailId(form.elements.email.value);
+    const role = form.elements.role.value;
     if (!/^\S+@\S+\.\S+$/.test(email)) return toast('כתובת אימייל לא תקינה', 'err');
     const exists = state.users.some(u => u.id === email);
     form.reset();
     userAction(email, () => exists
-      ? store.patch(COL.users, email, { status: U.APPROVED })
-      : store.set(COL.users, email, { email, name: '', status: U.APPROVED, createdAt: Date.now(), addedBy: state.user.email }),
-    `ניתנה הרשאה: ${email}`);
+      ? store.patch(COL.users, email, { status: U.APPROVED, role })
+      : store.set(COL.users, email, { email, name: '', status: U.APPROVED, role, createdAt: Date.now(), addedBy: state.user.email }),
+    `ניתנה הרשאה: ${email} (${ROLE_LABEL[role] || role})`);
   });
 
   // ───────── אירועים ─────────
@@ -584,11 +676,25 @@
       case 'visitor-enter': visitorEnter(id); break;
       case 'visitor-leave': visitorLeave(id); break;
       case 'visitor-delete': visitorDelete(id); break;
-      case 'user-approve': setUserStatus(id, U.APPROVED, 'המשתמש אושר'); break;
+      case 'student-edit': { const s = state.students.find(x => x.id === id); if (s) openEdit('student', s); break; }
+      case 'visitor-edit': { const v = state.visitors.find(x => x.id === id); if (v) openEdit('visitor', v); break; }
+      case 'close-edit': closeEdit(); break;
+      case 'user-approve': {
+        const roleEl = document.querySelector(`[data-role-input="${CSS.escape(id)}"]`);
+        const patch = roleEl ? { status: U.APPROVED, role: roleEl.value } : { status: U.APPROVED };
+        userAction(id, () => store.patch(COL.users, id, patch), 'המשתמש אושר');
+        break;
+      }
       case 'user-block': setUserStatus(id, U.BLOCKED, 'המשתמש נחסם'); break;
       case 'user-remove': removeUser(id); break;
       case 'logout': store.auth && store.auth.signOut(); break;
     }
+  });
+
+  document.addEventListener('change', e => {
+    const el = e.target.closest('[data-role-input]');
+    if (!el) return;
+    userAction(el.dataset.roleInput, () => store.patch(COL.users, el.dataset.roleInput, { role: el.value }), 'התפקיד עודכן');
   });
 
   $('#guard-name').value = state.guardName;
@@ -604,7 +710,7 @@
   const formVisitor = $('#form-visitor');
 
   function initForms() {
-    const by = ls.get('staffName');
+    const by = myDisplayName() || ls.get('staffName');
     formStudent.elements.exitDate.value = todayStr();
     formStudent.elements.exitTime.value = nowClock();
     formStudent.elements.approvedBy.value = by;
@@ -659,11 +765,14 @@
 
   function renderChrome() {
     const admin = isAdmin();
-    $('#role-badge').classList.toggle('hidden', !admin);
+    const role = myRole();
+    $('#role-badge').classList.toggle('hidden', !role);
+    if (role) $('#role-badge').textContent = ROLE_LABEL[role] || '';
+    $('#user-name').classList.toggle('hidden', !state.user);
+    $('#user-name').textContent = myDisplayName();
     $('#btn-admin-login').classList.toggle('hidden', admin || gated);
     $('#logout').classList.toggle('hidden', !state.user);
     $$('[data-role="filters"]').forEach(el => el.classList.toggle('hidden', !admin));
-    $('#nav-admin').classList.toggle('hidden', !admin);
     syncTabs();
   }
 
@@ -703,7 +812,11 @@
       }
       if (state.user !== user) return;                      // התנתק בינתיים
       unsubAccess = store.subscribeDoc(COL.users, id,
-        doc => setAccess(doc && Object.values(U).includes(doc.status) ? doc.status : U.PENDING),
+        doc => {
+          state.myRole = (doc && doc.role) || null;
+          renderChrome();
+          setAccess(doc && Object.values(U).includes(doc.status) ? doc.status : U.PENDING);
+        },
         err => { console.error(err); setAccess('error'); });
     } catch (err) {
       console.error(err);
@@ -753,13 +866,26 @@
     state.students = [];
     state.visitors = [];
     state.users = [];
+    if (!state.user) state.myRole = null;
     $('#app').classList.add('hidden');
     renderAll();
+  }
+
+  // ממלא ברירת מחדל לשם המאשר/השומר מתוך חשבון ה-Google המחובר (אם עוד לא הוזן שם ידנית)
+  function applyIdentityDefaults() {
+    const name = myDisplayName();
+    if (name && !ls.get('guardName')) {
+      state.guardName = name;
+      ls.set('guardName', name);
+      $('#guard-name').value = name;
+    }
+    initForms();
   }
 
   function start() {
     stop();
     $('#app').classList.remove('hidden');
+    applyIdentityDefaults();
     subErrorShown = false;
     setConn(store.mode === 'local' ? 'demo' : 'connecting');
     const onData = (key) => (list, fromCache) => {
@@ -794,7 +920,7 @@
     $('#demo-banner').classList.toggle('hidden', !demo);
     initForms();
     const hash = location.hash.slice(1);
-    state.view = ['guard', 'admin'].includes(hash) ? hash : 'staff';
+    state.view = ['guard', 'records', 'admin'].includes(hash) ? hash : 'staff';
     syncTabs();
     renderAll();
 

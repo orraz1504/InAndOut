@@ -5,8 +5,16 @@ service cloud.firestore {
     function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
     function me() { return request.auth.token.email.lower(); }
 
-    // אותה רשימה כמו adminEmails ב-firebase-config.js
-    function isAdmin() { return signedIn() && me() in ['or.raz1504@gmail.com']; }
+    // אדמין = ברשימת adminEmails הקבועה ב-firebase-config.js (bootstrap), או שמנהל קיים הגדיר לו role: 'admin'
+    // דרך מסך הניהול (users/<email>.role == 'admin' וגם status == 'approved').
+    function isAdmin() {
+      return signedIn() && (
+        me() in ['or.raz1504@gmail.com'] ||
+        (exists(/databases/$(database)/documents/users/$(me()))
+          && get(/databases/$(database)/documents/users/$(me())).data.role == 'admin'
+          && get(/databases/$(database)/documents/users/$(me())).data.status == 'approved')
+      );
+    }
 
     // משתמש מורשה = יש לו מסמך users/<email> עם status == 'approved' (המנהל מאשר במסך "ניהול")
     function isApproved() {
