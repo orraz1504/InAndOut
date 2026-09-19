@@ -205,7 +205,7 @@
       <button class="btn btn-primary mt-4" data-action="open-login">🔑 כניסת מנהל</button></div>`;
 
   function renderStaffStudents() {
-    const box = $('#staff-students-table');
+    const box = $('#rec-students-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
     const today = todayStr();
     const all = state.staffFilter === 'all';
@@ -233,7 +233,7 @@
   }
 
   function renderStaffVisitors() {
-    const box = $('#staff-visitors-table');
+    const box = $('#rec-visitors-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
     const today = todayStr();
     const all = state.staffFilter === 'all';
@@ -753,11 +753,13 @@
     state.students = [];
     state.visitors = [];
     state.users = [];
+    $('#app').classList.add('hidden');
     renderAll();
   }
 
   function start() {
     stop();
+    $('#app').classList.remove('hidden');
     subErrorShown = false;
     setConn(store.mode === 'local' ? 'demo' : 'connecting');
     const onData = (key) => (list, fromCache) => {

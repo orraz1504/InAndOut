@@ -96,8 +96,8 @@
       <!-- ═════════════ מסך צוות: טפסי הזנה בלבד ═════════════ -->
       <section id="view-staff">
         <div class="sticky top-14 z-20 -mx-4 mb-4 flex gap-2 bg-slate-50/95 px-4 py-2 backdrop-blur" role="tablist">
-          <button class="tab" role="tab" data-action="staff-tab" data-tab="students">🎒 יציאת תלמיד</button>
-          <button class="tab" role="tab" data-action="staff-tab" data-tab="visitors">🪪 כניסת מבקר</button>
+          <button class="tab" role="tab" data-action="staff-tab" data-tab="students">🎒 יציאת תלמיד <span class="count" id="cnt-staff-students">0</span></button>
+          <button class="tab" role="tab" data-action="staff-tab" data-tab="visitors">🪪 כניסת מבקר <span class="count" id="cnt-staff-visitors">0</span></button>
         </div>
 
         <!-- יציאת תלמיד -->
@@ -262,6 +262,7 @@
       <button id="btn-google" type="button" class="btn w-full border border-slate-300 bg-white py-3.5 text-base text-slate-700 hover:bg-slate-50" data-action="google-login">
         <span class="text-xl font-extrabold text-blue-600">G</span> התחברות עם Google
       </button>
+      <p id="login-note" class="text-center text-sm text-slate-500 hidden">כל חשבון Google יכול להתחבר. הגישה לנתונים נפתחת רק לאחר אישור המנהל.</p>
       <div id="login-password-part" class="space-y-4">   <!-- הדגמה בלבד -->
         <div><label class="label" for="l-email">אימייל</label>
           <input id="l-email" name="email" type="email" dir="ltr" class="field" autocomplete="username" required></div>
