@@ -133,7 +133,7 @@
 
   // ───────── מצב ─────────
   const state = {
-    view: 'staff', staffTab: 'students', guardTab: 'students', guardRange: 'today', staffFilter: 'today',
+    view: 'staff', staffTab: 'students', guardTab: 'students', guardRange: 'today',
     students: [], visitors: [], users: [], query: '',
     guardName: ls.get('guardName'),
     user: null, myRole: null,
@@ -214,45 +214,54 @@
       ${action ? `<div class="mt-3">${action}</div>` : ''}</article>`;
   const locked = () => `<div class="rounded-xl bg-slate-50 p-6 text-center">
       <div class="text-4xl">🔒</div>
-      <p class="mt-2 text-lg font-bold">טבלת האישורים זמינה למנהל בלבד</p>
+      <p class="mt-2 text-lg font-bold">הרשימה זמינה למנהל בלבד</p>
       <button class="btn btn-primary mt-4" data-action="open-login">🔑 כניסת מנהל</button></div>`;
+
+  // רשימה מקיפה (כל הרשומות, לא רק היום), מקובצת לפי חודש – החודש האחרון קודם.
+  const monthLabel = ym => {
+    const [y, m] = ym.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('he-IL', { month: 'long', year: 'numeric' });
+  };
+  function groupByMonth(list, dateKey) {
+    const groups = {};
+    list.forEach(item => (groups[item[dateKey].slice(0, 7)] ||= []).push(item));
+    return Object.keys(groups).sort().reverse().map(ym => ({ label: monthLabel(ym), items: groups[ym] }));
+  }
+  const monthSection = (label, count, body) => `<section class="mb-6 last:mb-0">
+      <h3 class="mb-2 text-base font-extrabold text-brand-700">${label} <span class="text-sm font-semibold text-slate-500">(${count})</span></h3>
+      ${body}</section>`;
 
   function renderStaffStudents() {
     const box = $('#rec-students-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
-    const today = todayStr();
-    const all = state.staffFilter === 'all';
-    const list = sortBy(state.students.filter(s => all || s.exitDate === today),
-      s => s.exitDate + s.exitTime, all ? -1 : 1);
+    if (!state.students.length) { box.innerHTML = empty('אין אישורי יציאה'); return; }
     const tone = { [S.PENDING]: 'bg-amber-100 text-amber-800', [S.EXITED]: 'bg-emerald-100 text-emerald-800', [S.CANCELLED]: 'bg-slate-200 text-slate-600' };
     const detail = s => s.status === S.EXITED
       ? `<div class="mt-1 text-sm text-slate-500">ב-${fmtTs(s.actualExitAt)} · שומר: ${esc(s.guardName)}</div>` : '';
     const cancelBtn = (s, cls = '') => s.status === S.PENDING
       ? `<button class="btn btn-danger btn-sm ${cls}" data-action="student-cancel" data-id="${esc(s.id)}">ביטול אישור</button>` : '';
     const editBtn = (s, cls = '') => `<button class="btn btn-ghost btn-sm ${cls}" data-action="student-edit" data-id="${esc(s.id)}">✏️ עריכה</button>`;
-    box.innerHTML = listView(
+    const groups = groupByMonth(sortBy(state.students, s => s.exitDate + s.exitTime, -1), 'exitDate');
+    box.innerHTML = groups.map(g => monthSection(g.label, g.items.length, listView(
       ['תלמיד/ה', 'כיתה', 'יציאה מאושרת', 'מאשר/ת', 'סטטוס', ''],
-      list.map(s => `<tr>
+      g.items.map(s => `<tr>
         ${td(esc(s.studentName), 'font-bold')}
         ${td(esc(s.grade))}
         ${td(`${fmtDate(s.exitDate)} · ${esc(s.exitTime)}`)}
         ${td(esc(s.approvedBy))}
         ${td(pill(s.status, tone[s.status] || '') + detail(s))}
         ${td(`<div class="flex flex-wrap gap-2">${editBtn(s)}${cancelBtn(s)}</div>`)}</tr>`),
-      list.map(s => miniCard(
+      g.items.map(s => miniCard(
         `<div class="text-base font-bold">${esc(s.studentName)}</div>${pill(s.status, tone[s.status] || '')}`,
         `כיתה ${esc(s.grade)} · ${fmtDate(s.exitDate)} ${esc(s.exitTime)} · אישר/ה: ${esc(s.approvedBy)}`,
         detail(s), `<div class="flex gap-2">${editBtn(s, 'flex-1 py-3')}${cancelBtn(s, 'flex-1 py-3')}</div>`)),
-      all ? 'אין אישורי יציאה' : 'אין אישורי יציאה להיום');
+      ''))).join('');
   }
 
   function renderStaffVisitors() {
     const box = $('#rec-visitors-table');
     if (!isAdmin()) { box.innerHTML = locked(); return; }
-    const today = todayStr();
-    const all = state.staffFilter === 'all';
-    const list = sortBy(state.visitors.filter(v => all || v.visitDate === today || v.status === V.INSIDE),
-      v => v.visitDate + String(v.createdAt).padStart(15, '0'), all ? -1 : 1);
+    if (!state.visitors.length) { box.innerHTML = empty('אין אישורי כניסה'); return; }
     const tone = { [V.PENDING]: 'bg-amber-100 text-amber-800', [V.INSIDE]: 'bg-emerald-100 text-emerald-800', [V.LEFT]: 'bg-slate-200 text-slate-600' };
     const detail = v => v.entryAt
       ? `<div class="mt-1 text-sm text-slate-500">נכנס ${fmtTs(v.entryAt)}${v.exitAt ? ` · יצא ${fmtTs(v.exitAt)}` : ''} · שומר: ${esc(v.guardName)}</div>` : '';
@@ -261,9 +270,10 @@
     const deleteBtn = (v, cls = '') => v.status === V.PENDING
       ? `<button class="btn btn-danger btn-sm ${cls}" data-action="visitor-delete" data-id="${esc(v.id)}">מחיקה</button>` : '';
     const editBtn = (v, cls = '') => `<button class="btn btn-ghost btn-sm ${cls}" data-action="visitor-edit" data-id="${esc(v.id)}">✏️ עריכה</button>`;
-    box.innerHTML = listView(
+    const groups = groupByMonth(sortBy(state.visitors, v => v.visitDate + String(v.createdAt).padStart(15, '0'), -1), 'visitDate');
+    box.innerHTML = groups.map(g => monthSection(g.label, g.items.length, listView(
       ['מבקר/ת', 'ת"ז', 'מטרה', 'ליווי', 'נשק', 'מאשר/ת', 'תאריך', 'סטטוס', ''],
-      list.map(v => `<tr>
+      g.items.map(v => `<tr>
         ${td(`${esc(v.firstName)} ${esc(v.lastName)}`, 'font-bold')}
         ${td(esc(v.idNumber))}
         ${td(esc(v.purpose))}
@@ -273,12 +283,12 @@
         ${td(fmtDate(v.visitDate))}
         ${td(pill(v.status, tone[v.status] || '') + detail(v))}
         ${td(`<div class="flex flex-wrap gap-2">${editBtn(v)}${deleteBtn(v)}</div>`)}</tr>`),
-      list.map(v => miniCard(
+      g.items.map(v => miniCard(
         `<div class="text-base font-bold">${esc(v.firstName)} ${esc(v.lastName)}</div>${pill(v.status, tone[v.status] || '')}`,
         `ת"ז ${esc(v.idNumber)} · ${esc(v.purpose)}<br>${fmtDate(v.visitDate)} · אישר/ה: ${esc(v.approvedBy)}`,
         `<div class="mt-2 flex flex-wrap gap-2">${escort(v)}${armed(v)}</div>${detail(v)}`,
         `<div class="flex gap-2">${editBtn(v, 'flex-1 py-3')}${deleteBtn(v, 'flex-1 py-3')}</div>`)),
-      all ? 'אין אישורי כניסה' : 'אין אישורי כניסה להיום');
+      ''))).join('');
   }
 
   // ───────── עריכת רשומה (מנהל בלבד) ─────────
@@ -488,7 +498,6 @@
     $$('[data-action="guard-tab"]').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === state.guardTab));
     $('#guard-students-panel').classList.toggle('hidden', state.guardTab !== 'students');
     $('#guard-visitors-panel').classList.toggle('hidden', state.guardTab !== 'visitors');
-    $$('[data-action="filter"]').forEach(b => b.setAttribute('aria-pressed', b.dataset.filter === state.staffFilter));
     $$('[data-action="guard-range"]').forEach(b => b.setAttribute('aria-pressed', b.dataset.range === state.guardRange));
     $('#guard-students-today').classList.toggle('hidden', state.guardRange !== 'today');
     $('#guard-students-future').classList.toggle('hidden', state.guardRange !== 'future');
@@ -669,7 +678,6 @@
       case 'open-login': showLogin(true); break;
       case 'close-login': if (!gated) showLogin(false); break;
       case 'google-login': googleLogin(); break;
-      case 'filter': state.staffFilter = el.dataset.filter; syncTabs(); renderStaffStudents(); renderStaffVisitors(); break;
       case 'student-exit': studentExit(id); break;
       case 'student-undo': studentUndo(id); break;
       case 'student-cancel': studentCancel(id); break;
@@ -772,7 +780,6 @@
     $('#user-name').textContent = myDisplayName();
     $('#btn-admin-login').classList.toggle('hidden', admin || gated);
     $('#logout').classList.toggle('hidden', !state.user);
-    $$('[data-role="filters"]').forEach(el => el.classList.toggle('hidden', !admin));
     syncTabs();
   }
 

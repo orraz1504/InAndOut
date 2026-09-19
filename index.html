@@ -173,32 +173,15 @@
         </div>
       </section>
 
-      <!-- ═════════════ טבלאות אישורים (מנהל בלבד) ═════════════ -->
-      <section id="view-records" class="hidden">
-        <div class="sticky top-14 z-20 -mx-4 mb-4 flex gap-2 bg-slate-50/95 px-4 py-2 backdrop-blur" role="tablist">
-          <button class="tab" role="tab" data-action="rec-tab" data-tab="students">🎒 יציאות תלמידים <span class="count" id="cnt-rec-students">0</span></button>
-          <button class="tab" role="tab" data-action="rec-tab" data-tab="visitors">🪪 מבקרים <span class="count" id="cnt-rec-visitors">0</span></button>
-        </div>
-
-        <div id="rec-students" class="card">
-          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-lg font-extrabold">אישורי יציאה</h2>
-            <div class="flex gap-2">
-              <button class="chip" data-action="filter" data-filter="today">היום</button>
-              <button class="chip" data-action="filter" data-filter="all">הכל</button>
-            </div>
-          </div>
+      <!-- ═════════════ רשימה מקיפה, ממוינת לפי חודש (מנהל בלבד) ═════════════ -->
+      <section id="view-records" class="hidden space-y-6">
+        <div class="card">
+          <h2 class="mb-3 text-lg font-extrabold">🎒 אישורי יציאה</h2>
           <div id="rec-students-table"></div>
         </div>
 
-        <div id="rec-visitors" class="card">
-          <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-lg font-extrabold">אישורי כניסה למבקרים</h2>
-            <div class="flex gap-2">
-              <button class="chip" data-action="filter" data-filter="today">היום</button>
-              <button class="chip" data-action="filter" data-filter="all">הכל</button>
-            </div>
-          </div>
+        <div class="card">
+          <h2 class="mb-3 text-lg font-extrabold">🪪 אישורי כניסה למבקרים</h2>
           <div id="rec-visitors-table"></div>
         </div>
       </section>
